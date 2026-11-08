@@ -1,0 +1,11 @@
+# Cython native extension sources (required to build the wheel from an sdist)
+include _win_console.pyx
+include _win_console.c
+include setup.py
+
+# License and docs
+include LICENSE
+include *.md
+
+# Tests
+recursive-include tests *.py
