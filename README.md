@@ -325,8 +325,16 @@ This is stronger than v0.1's guarantee ("convention + review"). In v0.1
 `inject_console_input` was callable from the public surface and R2 relied on
 `on_undelivered_file_created` never passing message-derived text; in v0.2 the
 entire inject call graph is unreachable from senders *by construction*. A
-dedicated test fixes this: `send`'s AST/import closure must not contain
-`_adapter` or `_win_console` symbols.
+dedicated test fixes this:
+[`tests/test_d4_r2_r1_invariants.py::test_r2_send_callgraph_no_win_console_conin`](./tests/test_d4_r2_r1_invariants.py)
+parses `console_injector.py`, walks `send()`'s AST transitively, and fails
+closed if any of `{_adapter, _win_console, CONIN$, AttachConsole,
+find_agy_pid_by_conversation_id, inject_console_input, find_pid_by_lock_path,
+_default_adapter}` is reachable or a dynamic import appears. Two runtime
+siblings back it up: `test_r2_send_with_win_console_unavailable` removes
+`_win_console` from `sys.modules` and still imports `send` cleanly, and
+`test_r2_public_namespace_only_send_list_recipients` asserts
+`dir(agentknock) == {"send", "list_recipients"}`.
 
 ### Wake-signal / payload separation
 

@@ -220,7 +220,7 @@ injected_input_trust_label: USER_EXPLICIT   # 注入テキスト == 人間オー
 
 R2 は**公開 API 形状の構造的特性**です。`send()` の静的コールグラフは `_adapter` にも `_win_console` にも到達しません——送信者は `CONIN$` 注入を、偶然も含めて、いかなるフィールド・キーワード引数・環境変数からも呼び出せません。これが L2 分割の目的です: alias 解決は純粋なファイル読取関数 `_resolve_alias_from_registry` に置かれ、これは `_adapter` も Win32 コードも import しません。ゆえに `send()` の AST／import closure には mailbox 書き込みとこの registry 読取しか含まれません。`CONIN$` 注入は**受信側**の orochi ウォッチャが、署名付き JSON を検証したのちに*のみ*実行するもので、その時書き込まれるナッジは受信側ローカルの `WAKE_NUDGE_CATALOG` のみから解決され、`msg_data` から導出されることは決してありません。
 
-これは v0.1 の保証（「規約＋レビュー」）より強力です。v0.1 では `inject_console_input` が公開面から呼び出し可能で、R2 は `on_undelivered_file_created` がメッセージ由来のテキストを渡さないことに依存していました。v0.2 では inject のコールグラフ全体が、*構造的に*送信者から到達不能です。これを固定する専用テストが用意されます: `send` の AST／import closure に `_adapter` や `_win_console` のシンボルが現れてはならない、というものです。
+これは v0.1 の保証（「規約＋レビュー」）より強力です。v0.1 では `inject_console_input` が公開面から呼び出し可能で、R2 は `on_undelivered_file_created` がメッセージ由来のテキストを渡さないことに依存していました。v0.2 では inject のコールグラフ全体が、*構造的に*送信者から到達不能です。これを固定する専用テスト ([`tests/test_d4_r2_r1_invariants.py::test_r2_send_callgraph_no_win_console_conin`](./tests/test_d4_r2_r1_invariants.py)) が `console_injector.py` をパースし `send()` の AST を推移的に追跡、`{_adapter, _win_console, CONIN$, AttachConsole, find_agy_pid_by_conversation_id, inject_console_input, find_pid_by_lock_path, _default_adapter}` のいずれかに到達するか動的 import が現れた時点で fail-closed します。実行時の裏付けとして `test_r2_send_with_win_console_unavailable` (`sys.modules` から `_win_console` を削除しても `send` が import 可能であることを確認) と `test_r2_public_namespace_only_send_list_recipients` (`dir(agentknock) == {"send", "list_recipients"}` を強制) の 2 テストが併置されています。
 
 ### 起床シグナルとペイロードの分離
 
