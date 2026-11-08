@@ -1,0 +1,16 @@
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv
+
+# Native extension build artifacts (sources .pyx/.c/setup.py are tracked)
+*.pyd
+*.lib
+*.pdb
+
+# Secrets / local env
+.env
+.env.local
