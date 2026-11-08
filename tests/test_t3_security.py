@@ -4,6 +4,7 @@ import uuid
 import pytest
 
 import console_injector as ci
+import agentknock._adapter as adp
 
 
 def _write_message(tmp_path, *, sender="claude-agent", title="hello", content="body", extra=None):
@@ -29,13 +30,13 @@ def _write_message(tmp_path, *, sender="claude-agent", title="hello", content="b
 def test_r2_wake_prompt_never_derives_from_msg_data(tmp_path, monkeypatch):
     monkeypatch.delenv("CONINJECT_LOCALE", raising=False)
     captured = {}
-    monkeypatch.setattr(ci, "find_agy_pid_by_conversation_id", lambda cid: 4242)
+    monkeypatch.setattr(adp._default_adapter, "_find_pid", lambda cid: 4242)
 
-    def fake_inject(target_pid, text, send_enter=True, submit_delay_sec=0.08):
+    def fake_inject(pid, text, send_enter=True, submit_delay_sec=0.08):
         captured["text"] = text
         return True
 
-    monkeypatch.setattr(ci, "inject_console_input", fake_inject)
+    monkeypatch.setattr(adp._default_adapter, "_inject", fake_inject)
 
     _, _, marker = _write_message(
         tmp_path,
@@ -54,10 +55,10 @@ def test_r2_wake_prompt_never_derives_from_msg_data(tmp_path, monkeypatch):
 def test_r2_sender_claimed_locale_is_ignored(tmp_path, monkeypatch):
     monkeypatch.delenv("CONINJECT_LOCALE", raising=False)
     captured = {}
-    monkeypatch.setattr(ci, "find_agy_pid_by_conversation_id", lambda cid: 4242)
+    monkeypatch.setattr(adp._default_adapter, "_find_pid", lambda cid: 4242)
     monkeypatch.setattr(
-        ci, "inject_console_input",
-        lambda target_pid, text, send_enter=True, submit_delay_sec=0.08: captured.__setitem__("text", text) or True,
+        adp._default_adapter, "_inject",
+        lambda pid, text, send_enter=True, submit_delay_sec=0.08: captured.__setitem__("text", text) or True,
     )
     _, _, marker = _write_message(tmp_path, extra={"locale": "ja"})
     ci.on_undelivered_file_created(marker, wake_locale="en")
@@ -67,9 +68,9 @@ def test_r2_sender_claimed_locale_is_ignored(tmp_path, monkeypatch):
 
 def test_no_op_when_marker_already_consumed(tmp_path, monkeypatch):
     fired = {"n": 0}
-    monkeypatch.setattr(ci, "find_agy_pid_by_conversation_id", lambda cid: 4242)
-    monkeypatch.setattr(ci, "inject_console_input",
-                        lambda *a, **k: fired.__setitem__("n", fired["n"] + 1) or True)
+    monkeypatch.setattr(adp._default_adapter, "_find_pid", lambda cid: 4242)
+    monkeypatch.setattr(adp._default_adapter, "_inject",
+                        lambda pid, text, send_enter=True, submit_delay_sec=0.08: fired.__setitem__("n", fired["n"] + 1) or True)
     _, _, marker = _write_message(tmp_path)
     marker.unlink()
     ok = ci.on_undelivered_file_created(marker, wake_locale="en")

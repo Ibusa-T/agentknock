@@ -31,29 +31,39 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-# 同ディレクトリの Cython 拡張 (_win_console.pyd / _win_console.pyx) をロード
+# agentknock をパッケージ外から実行しても同ディレクトリの純 L2 モジュールを解決可能にする
 _TOOLS_DIR = Path(__file__).resolve().parent
 if str(_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOLS_DIR))
 
-try:
-    import _win_console
-except ImportError:
-    import pyximport
-
-    pyximport.install(language_level=3, inplace=True)
-    import _win_console  # type: ignore[no-redef]
-
-
-# UUID (会話ID / Message-ID) バリデーション用正規表現
-UUID_REGEX = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+# [D0/D1] 契約・台帳(L2)を読み込む。
+# ※ R2 構造保証: この層は L0 (`_win_console`) / L1 (`_adapter`) を一切 import しない。
+#   起床 (CONIN$ 注入) は受信側常駐ウォッチャ / 診断 CLI からのみ `_adapter` を遅延 import して行う。
+from _contract import (
+    AGY_BASE_SUBDIR,
+    ALIAS_PATTERN,
+    DEAD_LETTER_DIRNAME,
+    REGISTRY_DIRNAME,
+    UUID_REGEX as UUID_REGEX_PATTERN,
+    Recipient,
+)
+from _registry import (
+    is_valid_alias,
+    list_recipients,
+    register_self,
+    unregister_self,
+    _resolve_alias_from_registry,
 )
 
+
+# UUID (会話ID / Message-ID) バリデーション用正規表現 (_contract.UUID_REGEX 準拠)
+UUID_REGEX = re.compile(UUID_REGEX_PATTERN)
+
 # Antigravity CLI のベースディレクトリ
-AGY_BASE_DIR = Path.home() / ".gemini" / "antigravity-cli"
+AGY_BASE_DIR = Path.home() / AGY_BASE_SUBDIR
 BRAIN_DIR = AGY_BASE_DIR / "brain"
 PRESENCE_DIR = AGY_BASE_DIR / "presence"
+REGISTRY_DIR = AGY_BASE_DIR / REGISTRY_DIRNAME
 
 
 # ============================================================================
@@ -219,7 +229,7 @@ def resolve_wake_prompt(
 # 0b. セキュリティ硬化ヘルパ (sender 検証 / title 帰属サニタイズ) [T3]
 # ============================================================================
 
-SENDER_FORMAT_REGEX = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+SENDER_FORMAT_REGEX = re.compile(ALIAS_PATTERN)
 _TITLE_MAX_LEN = 120
 _ENV_DEFAULT = object()
 
@@ -265,59 +275,46 @@ def _attributed_title(title) -> str:
 
 
 # ============================================================================
-# 1. 会話ID (UUID) から起動中の agy.exe の PID を逆引きする関数 (Cython 委譲)
+# 1. L3 公開 API: send (alias 宛て mailbox 投函) [D0/D1]
 # ============================================================================
+# ※ R2 構造保証: この層は `_win_console` / `_adapter` を一切 import しない。
+#   alias 解決 / list_recipients は純 L2 モジュール `_registry` に委譲する
+#   (is_valid_alias / _resolve_alias_from_registry / list_recipients を再公開)。
+# ※ 旧 L0/L1 関数 (find_agy_pid_by_conversation_id / inject_console_input) は
+#   `agentknock/_adapter.py` (_AgyAdapter._find_pid / _inject) へ移設済み。
 
-def find_agy_pid_by_conversation_id(conversation_id: str) -> Optional[int]:
-    """
-    presence/<conversation_id>.lock を掴んでいる agy.exe のプロセスID (PID) を
-    Cython 拡張 (`_win_console.find_pid_by_lock_path`) 経由で取得する。
-    """
-    if not UUID_REGEX.match(conversation_id):
-        raise ValueError(f"不正な会話ID形式です: {conversation_id}")
-
-    lock_path = PRESENCE_DIR / f"{conversation_id}.lock"
-    if not lock_path.exists():
-        return None
-
-    return _win_console.find_pid_by_lock_path(str(lock_path))
-
-
-# ============================================================================
-# 2. バックグラウンドで対象 PID のコンソール入力 (CONIN$) に文字＋Enterを注入 (Cython 委譲)
-# ============================================================================
-
-def inject_console_input(
-    target_pid: int,
-    text: Optional[str] = None,
-    send_enter: bool = True,
-    submit_delay_sec: float = 0.08,
+def send(
+    recipient: str,
+    content: str,
     *,
-    wake_locale: Optional[str] = None,
-    output_locale: Optional[str] = None,
-) -> bool:
+    sender: str,
+    base_brain_dir: Optional[Path] = None,
+    registry_dir: Optional[Path] = None,
+) -> str:
     """
-    指定した PID (agy.exe) のコンソール入力バッファ (CONIN$) に
-    Cython 拡張 (`_win_console.inject_console_input`) を用いて GIL 解放 (`nogil`) 状態で
-    バックグラウンドで文字列と Enter キーを直接書き込む（フォーカス移動なし）。
-
-    ※ R2準拠: `text` 未指定時はローカル設定 (`wake_locale` / `output_locale`) に基づき
-       `WAKE_NUDGE_CATALOG` の定数へ解決される。呼び出し側は msg_data 由来の文字列を
-       `text` に渡してはならない（起床ナッジは常にローカル定数カタログ由来）。
+    [L3 公開 API]
+    recipient (alias、生UUID不可) 宛てに署名付き JSON を mailbox へ投函し message_id を返す。
+    起床は受信側常駐ウォッチャが担当するため、この関数は mailbox 書込のみで即時完了する。
+    ※ R2保証: この関数のコールグラフから CONIN$ / PID / _adapter / _win_console へは到達不能。
     """
-    resolved_text = (
-        text
-        if text is not None
-        else resolve_wake_prompt(wake_locale=wake_locale, output_locale=output_locale)
-    )
-    return bool(
-        _win_console.inject_console_input(
-            target_pid,
-            resolved_text,
-            send_enter,
-            submit_delay_sec,
+    if not is_valid_alias(recipient):
+        raise ValueError(
+            f"不正な宛先 alias です (生UUIDや不正文字は指定できません): {recipient!r}"
         )
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("content は空でない文字列である必要があります。")
+
+    conversation_id = _resolve_alias_from_registry(recipient, registry_dir=registry_dir)
+    if not conversation_id:
+        raise LookupError(f"有効な宛先 alias が台帳に見つかりません: {recipient!r}")
+
+    undelivered_path = create_external_message(
+        recipient_id=conversation_id,
+        content=content,
+        sender_id=sender,
+        base_brain_dir=base_brain_dir,
     )
+    return undelivered_path.name
 
 
 # ============================================================================
@@ -456,61 +453,69 @@ def on_undelivered_file_created(
     sender_id = msg_data.get("sender", "")
     message_id = msg_data.get("id", "")
 
-    pid = find_agy_pid_by_conversation_id(recipient_id)
-    if not pid:
-        print(f"⚠️ 宛先会話ID ({recipient_id}) の起動中 agy.exe プロセスが見つかりません。")
-        return False
-
     # [T3] 空撃ち No-Op: 未読マーカーが既に消費済みなら注入しない
     marker = Path(undelivered_file_path)
     if not marker.exists():
         print(f"⚠️ 未読マーカーが既に消費済みのため注入を中止: {message_id}")
         return False
 
-    # [R2] 起床ナッジはローカル (wake_locale / output_locale) のみから解決する
+    # [D1/R2] 受信側ウォッチャ / 診断 CLI 専用: 内部アダプタ (_adapter.wake) 経由で起床する。
+    # ※ この遅延 import により、公開 send() のコールグラフには _adapter/_win_console が現れない。
+    from agentknock._adapter import _default_adapter
+
     resolved_wake = resolve_wake_locale(wake_locale)
     resolved_output = resolve_output_locale(output_locale, fallback_locale=resolved_wake)
-    wake_text = resolve_wake_prompt(wake_locale=resolved_wake, output_locale=resolved_output)
 
-    success = inject_console_input(
-        target_pid=pid,
-        text=wake_text,
+    success = _default_adapter.wake(
+        recipient_id,
+        wake_locale=resolved_wake,
+        output_locale=resolved_output,
         send_enter=send_enter,
         submit_delay_sec=submit_delay_sec,
     )
     if success:
         print(
             f"✅ [Wakeup成功] Message-ID: {message_id} | "
-            f"Sender: {sender_id} -> Recipient: {recipient_id} (PID: {pid}, "
+            f"Sender: {sender_id} -> Recipient: {recipient_id} ("
             f"wake_locale={resolved_wake}, output_locale={resolved_output})"
         )
     else:
-        print(f"❌ [Wakeup失敗] PID: {pid} へのコンソール入力注入に失敗しました。")
+        print(f"❌ [Wakeup失敗] 会話ID: {recipient_id} へのコンソール起床に失敗しました。")
 
     return success
 
 
 # ============================================================================
-# 4. 単体テスト・手動実行用 CLI
+# 4. 診断・ウォッチャ手動検証・MCP stdio 専用 CLI (doctor / --undelivered-file / --mcp-stdio) [D1]
 # ============================================================================
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Antigravity 別窓バックグラウンド入力注入ツール"
+        description="agentknock 診断・ウォッチャ手動検証・MCP stdio ツール (自由文字列注入不可)"
     )
     parser.add_argument(
-        "--conversation",
-        "-c",
-        help="起こしたい別窓の会話ID (UUID)",
+        "command",
+        nargs="?",
+        choices=["doctor"],
+        help="サブコマンド: 'doctor' で環境・presenceロック・opt-in台帳の健全性を診断",
+    )
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="環境・presenceロック・opt-in台帳の健全性を診断して JSON 出力",
     )
     parser.add_argument(
         "--undelivered-file",
         "-f",
-        help="検知した undelivered/<Message-ID> ファイルのパス",
+        help="[診断用] 検知した undelivered/<Message-ID> を手動で _adapter.wake() 経由起床",
     )
-    # [T2] 自由文字列 --text/-t は R2 のため完全廃止。ロケール選択のみ受け付ける
+    parser.add_argument(
+        "--mcp-stdio",
+        action="store_true",
+        help="MCP (Model Context Protocol) stdio サーバとして起動 (公開ツール: send, list_recipients)",
+    )
     parser.add_argument(
         "--locale",
         "-l",
@@ -530,61 +535,25 @@ if __name__ == "__main__":
         default=None,
         help="AI応答出力側のロケールを個別指定する場合に使用 (省略時は --locale に従う)",
     )
-    parser.add_argument(
-        "--send-message",
-        "-m",
-        help="外部エージェント(Claude等)から指定会話ID(--conversation)宛てに送信するメッセージ本文",
-    )
-    parser.add_argument(
-        "--sender",
-        "-s",
-        default="claude-agent",
-        help="外部メッセージ送信時の sender 名 (デフォルト: claude-agent)",
-    )
     args = parser.parse_args()
 
     cli_wake_locale = args.wake_locale if args.wake_locale is not None else args.locale
     cli_output_locale = args.output_locale if args.output_locale is not None else args.locale
 
-    if args.send_message and args.conversation:
-        undelivered = create_external_message(
-            recipient_id=args.conversation,
-            content=args.send_message,
-            sender_id=args.sender,
-        )
-        print(f"📩 外部メッセージを生成しました: {undelivered}")
-        on_undelivered_file_created(
-            undelivered,
-            wake_locale=cli_wake_locale,
-            output_locale=cli_output_locale,
-        )
+    if args.command == "doctor" or args.doctor:
+        from agentknock._adapter import _run_doctor
+
+        report = _run_doctor()
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    elif args.mcp_stdio:
+        from agentknock.mcp_server import run_stdio_server
+
+        run_stdio_server()
     elif args.undelivered_file:
         on_undelivered_file_created(
             args.undelivered_file,
             wake_locale=cli_wake_locale,
             output_locale=cli_output_locale,
         )
-    elif args.conversation:
-        # [T3] 空撃ち No-Op 準拠: 未読メッセージ (undelivered/*) が実在する場合のみ起床を実行
-        if not UUID_REGEX.match(args.conversation):
-            print(f"❌ 不正な会話ID形式です: {args.conversation}")
-            sys.exit(1)
-        undelivered_dir = (
-            BRAIN_DIR / args.conversation / ".system_generated" / "messages" / "undelivered"
-        )
-        candidates = sorted(undelivered_dir.iterdir()) if undelivered_dir.exists() else []
-        woken = False
-        for candidate in candidates:
-            if on_undelivered_file_created(
-                candidate,
-                wake_locale=cli_wake_locale,
-                output_locale=cli_output_locale,
-            ):
-                woken = True
-                break
-        if not woken:
-            print(
-                f"ℹ️ 会話ID {args.conversation} に有効な未読メッセージが存在しないため起床をスキップしました (No-Op)。"
-            )
     else:
         parser.print_help()

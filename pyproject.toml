@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentknock"
-version = "0.1.0"
+version = "0.2.0"
 description = "Attach to an already-running, unmodifiable Windows console AI agent and knock it awake — focus-free, by PID, via CONIN$. The attach-to-existing half of desktop multi-agent orchestration."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -38,10 +38,11 @@ classifiers = [
 Homepage = "https://github.com/Ibusa-T/agentknock"
 Repository = "https://github.com/Ibusa-T/agentknock"
 
-# agentknock はこのディレクトリの console_injector モジュールと _win_console 拡張のみを配布する。
+# agentknock (v0.2) は L2/L3 フラットモジュール群と公開パッケージ agentknock/ を配布する。
 # 同ディレクトリの agent_tools.py 等の無関係なファイルはパッケージに含めない。
 [tool.setuptools]
-py-modules = ["console_injector"]
+packages = ["agentknock"]
+py-modules = ["console_injector", "_contract", "_registry", "_watcher"]
 
 # ネイティブ拡張 (_win_console) のビルドは setup.py (cythonize / zig) が担う。
 # MSVC がある環境:  uv run python setup.py build_ext --inplace
