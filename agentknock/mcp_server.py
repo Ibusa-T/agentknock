@@ -1,11 +1,12 @@
 """
-agentknock MCP Server (stdio) & Strict Tool Schemas (DESIGN-0001 D1)
+agentknock MCP Server (stdio) & Strict Tool Schemas (v0.3.0 / BR1-SPEC).
 
 特徴:
-- `_contract.py` の `ALIAS_PATTERN` と `UUID_REGEX` を直接参照し、
-  「ALIAS_PATTERN 合致 かつ UUID_REGEX 非合致」を JSON Schema とディスパッチャの両方で強制。
+- `agentknock._contract` の `ALIAS_PATTERN` と `UUID_REGEX` を直接参照。
+- 公開ツール: `send`, `list_recipients`, `register_self`, `unregister_self`
 - `additionalProperties: False` と厳格キー検証により、スキーマ外のフィールドは一切渡せない。
 """
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -18,8 +19,8 @@ _TOOLS_ROOT = _MCP_DIR.parent
 if str(_TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(_TOOLS_ROOT))
 
-from _contract import ALIAS_PATTERN, UUID_REGEX
-from agentknock import list_recipients, send
+from agentknock._contract import ALIAS_PATTERN, UUID_REGEX
+from agentknock import list_recipients, register_self, send, unregister_self
 
 MCP_TOOLS_SCHEMA: Final[tuple[Mapping[str, Any], ...]] = (
     MappingProxyType(
@@ -71,6 +72,37 @@ MCP_TOOLS_SCHEMA: Final[tuple[Mapping[str, Any], ...]] = (
             },
         }
     ),
+    MappingProxyType(
+        {
+            "name": "register_self",
+            "description": "Register self into the opt-in discovery registry so others can send messages by alias.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "alias": {"type": "string", "pattern": ALIAS_PATTERN},
+                    "target_id": {"type": "string", "pattern": UUID_REGEX},
+                    "role": {"type": "string"},
+                    "ttl_sec": {"type": "number", "minimum": 1},
+                },
+                "required": ["alias", "target_id", "role"],
+                "additionalProperties": False,
+            },
+        }
+    ),
+    MappingProxyType(
+        {
+            "name": "unregister_self",
+            "description": "Kill switch: immediately remove self from discovery registry to halt inbound messages.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "alias": {"type": "string", "pattern": ALIAS_PATTERN},
+                },
+                "required": ["alias"],
+                "additionalProperties": False,
+            },
+        }
+    ),
 )
 
 _SEND_ALLOWED_KEYS: Final[frozenset[str]] = frozenset({"recipient", "content", "sender"})
@@ -106,6 +138,19 @@ def dispatch_mcp_tool(name: str, arguments: Optional[dict[str, Any]] = None) -> 
             )
         return {"recipients": list_recipients()}
 
+    if name == "register_self":
+        register_self(
+            alias=args["alias"],
+            target_id=args["target_id"],
+            role=args.get("role", ""),
+            ttl_sec=float(args.get("ttl_sec", 86400.0)),
+        )
+        return {"status": "ok", "alias": args["alias"]}
+
+    if name == "unregister_self":
+        ok = unregister_self(alias=args["alias"])
+        return {"status": "ok", "unregistered": ok}
+
     raise ValueError(f"Unknown MCP tool: {name!r}")
 
 
@@ -126,7 +171,7 @@ def run_stdio_server() -> None:
                 result = {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "agentknock", "version": "0.2.0"},
+                    "serverInfo": {"name": "agentknock", "version": "0.3.0"},
                 }
             elif method == "tools/list":
                 result = {"tools": [dict(t) for t in MCP_TOOLS_SCHEMA]}

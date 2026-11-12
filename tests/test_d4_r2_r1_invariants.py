@@ -135,14 +135,22 @@ def test_r2_send_with_win_console_unavailable(monkeypatch):
 
 def test_r2_public_namespace_only_send_list_recipients():
     """
-    R2 namespace 保証: agentknock の公開シンボルが {send, list_recipients} のみ。
+    R2 namespace 保証: agentknock の公開シンボルが許可されたファサードのみ。
+    v0.3.0 で B5/QS1 (AgentKnock, register_self, unregister_self, configure_default) が追加。
     """
     import agentknock
 
     public = set(dir(agentknock))
     public = {s for s in public if not s.startswith("_")}
 
-    expected = {"send", "list_recipients"}
+    expected = {
+        "AgentKnock",
+        "send",
+        "list_recipients",
+        "register_self",
+        "unregister_self",
+        "configure_default",
+    }
     assert public == expected, f"公開シンボルが一致しない。期待 {expected}, 実 {public}"
 
 

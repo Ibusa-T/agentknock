@@ -5,7 +5,9 @@
 
 [English](./README.md) | **日本語**
 
-**agentknock** は、**デスクトップ・マルチエージェント連携のためのトランスポート層**です。送信側エージェントは `send(recipient, content, sender=...)` を呼び、受信側ローカルの常駐ウォッチャが対象の対話型 CLI/TUI の AI エージェント（例: Antigravity の `agy.exe`、およびアダプタ経由で他の端末エージェント）を起床させます——Windows カーネル API（`AttachConsole` + `WriteConsoleInputW`）で対象プロセスのコンソール入力バッファ（`CONIN$`）へキー入力を注入する形で。対象ウィンドウはフォーカスを一切得ないため、人間のオーナーは作業を妨げられません。宛先プロセスは **PID** で特定し、それは対象自身が公開した presence ロックから逆引きします——ウィンドウタイトルでもプロセス列挙でもありません。
+**agentknock** は、**orochi 非依存の単体 OSS として動く、デスクトップ・マルチエージェント連携のためのトランスポート層**です: *通知付き mailbox*（`send()` は署名付き JSON をディレクトリに書き込み、受信側のローカルウォッチャが到着時にコールバックまたは差し替え可能なアダプタを発火する）＋ 4 つの小さな DI 拡張点（`Notifier`, `DeliveryAdapter`, `AliasRegistry`, `LivenessProbe`）で環境差分を吸収する設計です。
+
+core は**純 Python・外部依存なし**で動作します。`pip install agentknock` ＋ 共有ディレクトリだけで、同一マシン上の 2 つのエージェントが署名付きメッセージと起床コールバックのやり取りをできます——`watchdog` 不要、`agy.exe` 不要、`orochi` 不要。Windows 固有の `CONIN$` 注入と FS ネイティブ通知は**オプショナル extra** です。
 
 これは**キー入力自動化ではありません**。(a) 改変できず、(b) `stdin` しか読まず、(c) アイドル／バックグラウンドにあり、(d) 人間の前面セッションを妨げずに到達しなければならない——そういうエージェントのための、**欠けていた配送チャネル**です。メッセージキューは*協調的な購読者*を前提とし、RPA/`pyautogui` は*前面ウィンドウ*を前提とします。本ツールはそのどちらも前提にしません。
 
@@ -13,24 +15,145 @@
 
 ## この README は誰のためか
 
-本ドキュメントは**二つの異なる読者**を対象にしており、各読者向けのセクションを1つずつ用意しています。自分に合う方を読んでください:
+- **OSS 利用者** — コード・LLM function call・MCP ツールから agentknock で*送信する*人またはエージェント。まず **[Install & Quickstart](#install--quickstart-qs1)** を、次に **[公開 API](#公開-api利用者向け)** を読んでください。
+- **アダプタ作者** — `agy.exe` 以外の新しいターゲットエージェントへ agentknock を拡張する人。**[capability contract](#アダプタ作者向け-capability-contract)** と **[Adapter Authoring Checklist](./adapters/ADAPTER_AUTHORING.md)** を読んでください。
 
-- **OSS 利用者** — LLM の function call または MCP ツールから agentknock で*送信する*人またはエージェント。**[利用者向け: 公開 API](#利用者向け-公開-api)** を読んでください。できることはそのツールスキーマ1つに集約されています——そこに無いものは送れません。
-- **アダプタ作者** — `agy.exe` 以外の新しいターゲットエージェントへ agentknock を拡張する人。**[アダプタ作者向け: capability contract](#アダプタ作者向け-capability-contract)** を読んでください。あなたのアダプタが宣言する3つの load-bearing フィールドが、「プラットフォームが OSS 利用者にあなたのターゲットに対して何を安全に許すか」を決めます。
+両読者は以下のセクション——セキュリティ不変条件、マーカー・ライフサイクル、運用ガイド、脅威モデル——を共通して読んでください。
 
-両読者は以下のセクション——セキュリティ不変条件、scope contract、i18n、運用ガイド、脅威モデル——を共通して読んでください。
+---
+
+## Install & Quickstart (QS1)
+
+### インストール
+
+| インストール形態 | 外部依存 | 同梱されるもの |
+|:---|:---|:---|
+| `pip install agentknock` | **なし**（標準ライブラリのみ） | `Mailbox`, `PollingNotifier`, `CallbackDeliveryAdapter`, `OutboxDeliveryAdapter`, `FileSystemAliasRegistry`, `AlwaysAliveProbe`, `FileLockLivenessProbe`。同一マシン上の 2 つの Python エージェントが対話するのに必要十分。 |
+| `pip install "agentknock[watch]"` | `watchdog>=4.0` | ...＋ `WatchdogNotifier`（Windows: `ReadDirectoryChangesW`、Linux: `inotify`、macOS: `FSEvents`）。`watchdog` が import できない環境では自動で `PollingNotifier` にフォールバック。 |
+| `pip install "agentknock[win32]"` | ネイティブ Cython 拡張 | ...＋ `AgyDeliveryAdapter`（Windows `AttachConsole` + `WriteConsoleInputW` → `CONIN$` 注入）＋ `AgyLockLivenessProbe`（Restart Manager API）。Antigravity の `agy.exe` 系ターゲットを起こす場合にのみ必要。 |
+
+3 つの形態は積み上げ可能: `[watch]` + `[win32]` で全部入り。**core 機能は extra なしで全て動きます**——extra はオプションです。
+
+### Quickstart: 外部依存ゼロの往復
+
+同一マシン上の 2 つの Python プロセスだけで動きます。`agy.exe` も `orochi` も Windows カーネル呼び出しも不要。
+
+**受信側** (`recv.py`):
+
+```python
+from pathlib import Path
+import agentknock
+from agentknock.adapters.callback import CallbackDeliveryAdapter
+from agentknock.cli import WatchDaemon
+from agentknock.core.mailbox import Mailbox
+
+# 1. 自分自身を alias + 安定 target id で自己広告（opt-in R1）
+agentknock.register_self("hello-recv", target_id="recv-1", role="greeter")
+
+# 2. 起床コールバックを定義
+# 【A1 型レベル R2 保証】: wake は target_id のみを受け取ります（1ビットの呼び鈴原則）。
+# 実際の指示本文は、署名付き mailbox チャネルから能動的に安全に取得します。
+mailbox = Mailbox()
+
+def on_wake(target_id: str) -> bool:
+    print(f"[recv] Woken up for target: {target_id}")
+    undelivered = mailbox.get_undelivered_dir(target_id)
+    if undelivered.exists():
+        for marker in undelivered.iterdir():
+            msg = mailbox.validate_marker(marker)
+            if msg:
+                print(f"[recv] from={msg['sender']} content={msg['content']!r}")
+    return True
+
+adapter = CallbackDeliveryAdapter(callback=on_wake)
+
+# 3. 常駐バックグラウンド・ウォッチャデーモンを起動
+daemon = WatchDaemon(target="hello-recv", adapter=adapter, mailbox=mailbox)
+daemon.start()
+try:
+    input("Press Enter to stop...\n")
+finally:
+    daemon.stop()
+```
+
+**送信側** (`send.py`、別ターミナルで):
+
+```python
+import agentknock
+
+# 1. 到達可能な相手を発見する（R1: opt-in 台帳 ＋ 生存性）
+for r in agentknock.list_recipients():
+    print(r["alias"], r["role"], r["capabilities"])
+
+# 2. その alias に署名付き JSON メッセージを送る
+msg_id = agentknock.send(
+    recipient="hello-recv",
+    content="hello from the OSS Quickstart",
+    sender="quickstart-sender",
+)
+print("sent:", msg_id)
+```
+
+**実行:**
+
+```bash
+# ターミナル 1
+python recv.py
+# → 何も出力されず入力待ち
+
+# ターミナル 2（recv.py が走っている間に）
+python send.py
+# → hello-recv greeter {'surface_custom_json': True, 'honor_sender_locale': True, 'injected_input_trust_label': 'CALLBACK'}
+# → sent: <message-id>
+
+# ターミナル 1 に次が出力される:
+# → [recv] Woken up for target: recv-1
+# → [recv] from=quickstart-sender content='hello from the OSS Quickstart'
+```
+
+これだけで**往復完了です: 登録 → 一覧 → 送信 → 受信コールバック**。この後に続く CLI エージェント向けアダプタ・`CONIN$` 注入・Antigravity 連携は、すべて*この上に opt-in で乗る*ものです。
+
+### 常駐ウォッチャデーモン（RT1 CLI ランタイム）
+
+単体プロセスや自動化環境で常駐受信を行う場合、CLI から直接デーモンを起動できます:
+
+```bash
+# Antigravity (agy.exe) ターゲットを監視し、フォーカスを奪わずに CONIN$ 起床:
+python -m agentknock watch --target <alias-or-uuid> --adapter agy
+
+# カスタム配送アダプタとポーリング通知バックエンドで監視:
+python -m agentknock watch --target my-agent --adapter callback --notifier polling --poll-interval 0.5
+```
+
+| オプション | 説明 | 既定値 |
+| :--- | :--- | :--- |
+| `--target`, `-t` | 監視対象の conversation UUID または登録済み alias | None（ルート監視） |
+| `--adapter`, `-a` | 起床配送アダプタ（`agy`, `callback`, `outbox`） | `agy` |
+| `--mailbox`, `-m` | カスタム mailbox ルートディレクトリ | `~/.gemini/antigravity-cli/brain` |
+| `--notifier` | ファイルシステム通知バックエンド（`auto`, `watchdog`, `polling`） | `auto` |
+| `--poll-interval` | `polling` 使用時のポーリング間隔（秒） | `0.5` |
+| `--wake-locale` | `AgyDeliveryAdapter` の起床ナッジ言語（`en`, `ja`） | ローカル既定 |
+| `--output-locale`| `AgyDeliveryAdapter` の出力指示言語（`en`, `ja`） | ローカル既定 |
+| `--audit-log` | 追記専用監査ログ `audit.jsonl` のカスタムパス | `audit.jsonl` |
+| `--once` | 最初のメッセージを起床処理した後に終了（テスト/CI用） | False |
+
+### Agent Skill による自律マルチエージェント連携サイクル
+
+本ツールを **Agent Skill**（Antigravity や Claude Code 向けの `SKILL.md` など）としてエージェントが利用する場合、3 つのステップで自律連携します:
+
+1. **発見と送信**: 送信側エージェントは `agentknock.list_recipients()` で到達可能な協調相手を確認し、`agentknock.send(recipient=..., content=..., sender=...)` で署名付きタスクを投函します。
+2. **フォーカス非強奪の起床**: 受信側マシンで動作する `WatchDaemon` が `undelivered/` へのマーカー着信を検知し、`adapter.wake(target_id)` により作業中の人間オーナーの前面ウィンドウを奪わずに `CONIN$` へ起床ノックを送ります。
+3. **エージェント規約に基づく自律処理 (`AGENTS.md`)**: 起床したエージェントは呼び鈴を認識し、能動的に `<SYSTEM_MESSAGE>` ペイロードから指示をロードします。処理完了後に `undelivered/` マーカーを削除して `read.json` に記録します（R-M1 マーカー所有権）。
 
 ---
 
 ## ランチャー型オーケストレーターとの違い
 
-デスクトップ・マルチエージェント分野は活発です（例: [hcom]、CLI Agent Orchestrator、agentpipe）。それらは**ランチャー・ラッパー型**です。エージェントを*それら経由で*起動し（`hcom agy`）、ツールが作成した PTY を所有して最初からフックを仕込みます。それらが起こせるのは**自分自身が起動したエージェントだけ**で、Windows では*自前の* ConPTY に書き込む方式であり、自分が作っていないコンソールへ attach することはありません。
+デスクトップ・マルチエージェント分野は活発です（例: [hcom]、CLI Agent Orchestrator、agentpipe）。それらは**ランチャー・ラッパー型**です: エージェントを*それら経由で*起動し（`hcom agy`）、ツールが作成した PTY を所有して最初からフックを仕込みます。それらが起こせるのは**自分自身が起動したエージェントだけ**で、Windows では*自前の* ConPTY に書き込む方式であり、自分が作っていないコンソールへ attach することはありません。
 
-agentknock はその**補完的な半分**、すなわち **attach-to-existing（既存プロセスへの後付け attach）**です。エージェントは**普通に**起動されており——ラッパー無し・フック無し・再起動無し——agentknock はその既に動いている改変不能なプロセスを presence ロックから見つけ、PID を解決し、その*既存の*コンソール入力バッファへ注入します。すべてのエージェントをラッパー経由で再起動できるなら、ランチャーを使ってください。**既に動いていて、改変も再起動もできない**エージェントを起こす必要があるなら、そこが agentknock の埋めるギャップです。両者は競合ではなく補完です。
+agentknock はその**補完的な半分**、すなわち **attach-to-existing（既存プロセスへの後付け attach）**です。エージェントは**普通に**起動されており——ラッパー無し・フック無し・再起動無し——agentknock はその既に動いている改変不能なプロセスを opt-in `AliasRegistry` エントリから見つけ、内部 target id を解決し、差し替え可能な `DeliveryAdapter` を通じて到達します。すべてのエージェントをラッパー経由で再起動できるなら、ランチャーを使ってください。**既に動いていて、改変も再起動もできない**エージェントに到達する必要があるなら、そこが agentknock の埋めるギャップです。両者は競合ではなく補完です。
 
 [hcom]: https://github.com/aannoo/hcom
-
-エンドツーエンドのシーケンスと関数別リファレンスは [`WORK_FLOW.md`](./WORK_FLOW.md) を、**注入される側**のエージェントが従うべき規約は [`AGENTS.ja.md`](./AGENTS.ja.md) を、現アーキテクチャを決定した ADR は [`../orochi/DESIGN-0001-agentknock-positioning.md`](../orochi/DESIGN-0001-agentknock-positioning.md) を参照してください。
 
 ---
 
@@ -38,67 +161,105 @@ agentknock はその**補完的な半分**、すなわち **attach-to-existing�
 
 トランスポートは意図的に **1 ビットの呼び鈴**に絞られています。この**自己限定こそが製品**であり、正当な連携トランスポートと、同じ機構を持つ注入攻撃ツールとを分かつものです。
 
-理由は、受信側ハーネスが入力に付ける信頼ラベルの**非対称性**にあります（注入される側のエージェントの当事者証言に基づく）:
+`CONIN$` 型の起床チャネル（`AgyDeliveryAdapter`）については、その理由は受信側ハーネスが入力に付ける信頼ラベルの**非対称性**にあります（注入される側のエージェントの当事者証言に基づく）:
 
 | 到達経路 | 受信側エージェントが見る出所タグ | 信頼度 |
 | :--- | :--- | :--- |
 | JSON メッセージファイル（`<Message-ID>.json`） | `<SYSTEM_MESSAGE>` — `not sent by the user`、`sender` を持つ | **署名付き／帰属可能** |
-| `CONIN$` 注入（本ツール） | `source: USER_EXPLICIT` / `<USER_REQUEST>` — 人間オーナー自身のキー入力と区別不能 | **ゼロ** |
+| `CONIN$` 注入（帰属不能な起床チャネル） | `source: USER_EXPLICIT` / `<USER_REQUEST>` — 人間オーナー自身のキー入力と区別不能 | **ゼロ** |
 
 `CONIN$` へ注入された文字列は**人間オーナーが打ったかのように**届くため、リモート送信者にその文字列を制御させることは**オーナーへのなりすまし＝事実上の権限昇格**にあたります。したがって:
 
 - 呼び鈴（`CONIN$`）が運ぶのは**無害でローカル定義された起床ナッジのみ**。
 - 手紙（実際の指示）は**署名付き JSON チャネル**を通り、エージェントが*能動的に・帰属付きで*読みます。
 
+v0.3 ではこの原則は**型レベル**でも強制されるようになりました: `DeliveryAdapter.wake()` は text 引数をそもそも持ちません（下記 § R2 参照）。
+
 ---
 
-## 利用者向け: 公開 API
+## 4 つの拡張点 (DI)
 
-> これが OSS 利用者——人・エージェント・MCP クライアント——が agentknock でできることのすべてです。**関数 2 つ、ルール 1 つ: スキーマに無いものは送れない。**
+環境差分はすべてプラグインです。core（Message + Mailbox + Watcher）は標準ライブラリのみ・orochi 非依存で、4 つの拡張点によって core をフォークせずにあらゆるターゲットに適合できます。
 
-### 公開面
+| 拡張点 | 役割 | 既定実装 | 差し替えるのは... |
+|:---|:---|:---|:---|
+| **`Notifier`** | mailbox への新着マーカー検知 | `watchdog` が import 可能なら `WatchdogNotifier`、そうでなければ `PollingNotifier`（既定 500 ms、env `AGENTKNOCK_POLL_INTERVAL_SEC`）に自動フォールバック（B6） | カスタム FS イベント／Kafka 風トリガー／HTTP webhook 等をトリガー源にしたい時 |
+| **`DeliveryAdapter`** | 検証済みメッセージ到着時にターゲットを起こす。**`wake(target_id: str) -> bool`** — text 引数なし（A1、型レベル R2） | `CallbackDeliveryAdapter`（インプロセス、Quickstart）／`OutboxDeliveryAdapter`（ファイルブリッジ配送、BR1: Gemini → Claude）／`AgyDeliveryAdapter`（オプション、`[win32]` extra）`CONIN$` 注入 | 新ターゲットエージェント対応時。[Adapter Authoring Checklist](./adapters/ADAPTER_AUTHORING.md) 参照 |
+| **`AliasRegistry`** | opt-in 自己広告台帳、**Mailbox から独立（A3）**。`register` / `unregister` / `resolve` / `list_active` を公開 | `FileSystemAliasRegistry`（`~/.agentknock/registry/<alias>.json`）／`InMemoryAliasRegistry`（テスト用） | 複数マシン間で共有 SQLite やネットワーク台帳を使いたい時 |
+| **`LivenessProbe`** | ターゲットの生存判定（A2）。`is_alive(target_id) -> bool` | `AlwaysAliveProbe`（常に true）／`FileLockLivenessProbe`（任意 Mailbox）／`AgyLockLivenessProbe`（`[win32]`、Restart Manager 由来） | HTTP ping・pidfile 式・クラスタ対応生存判定が必要な時 |
 
-`agentknock` から公開されるのはこの 2 名のみです。両者は LLM ハーネス連携のため MCP ツール（`send` / `list_recipients`）としても露出されます。正本のスタブは `agentknock/_contract.py` にあります。
+`AgentKnock` クラスはこの 4 つを配線する DI コンテナです（下記 API セクション参照）。
+
+---
+
+## 公開 API（利用者向け）
+
+### 二層ファサード (B5): `AgentKnock` クラス＋トップレベル糖衣
+
+明示配線したいときは DI クラスを、既定構成で一行で済ませたいときはトップレベル糖衣関数を使います。
 
 ```python
-# agentknock/__init__.py
+from pathlib import Path
+from agentknock import AgentKnock
+from agentknock.core.mailbox import Mailbox
+from agentknock.core.registry import FileSystemAliasRegistry
+from agentknock.core.probe import AlwaysAliveProbe
 
-def send(recipient: str, content: str, *, sender: str) -> str:
-    """signed message を `recipient`（list_recipients が返す alias）へ配送し、
-    message_id を返す。内部では、`send()` は alias を **L2 の純関数**
-    `_resolve_alias_from_registry`（素のファイル読取のみ——Win32 もアダプタ
-    import も無し）で解決し、mailbox に書き込む。この関数の静的コールグラフ
-    は `_adapter` / `_win_console` / CONIN$ / PID / inject に到達しない
-    ——セキュリティ不変条件 § R2 を参照。"""
+# DI コンテナ — 明示配線
+client = AgentKnock(
+    mailbox=Mailbox(root=Path.home() / ".agentknock" / "mailbox"),
+    registry=FileSystemAliasRegistry(root=Path.home() / ".agentknock" / "registry"),
+    probe=AlwaysAliveProbe(),
+)
+client.register_self("my-agent", target_id="agent-1", role="worker")
+for r in client.list_recipients():
+    print(r)
+msg_id = client.send("peer-agent", "hello", sender="my-agent")
+```
 
-def list_recipients() -> list[Recipient]:
-    """opt-in discovery のみ（R1 参照）。registry エントリが未失効かつ
-    presence ロックが生存中の、alias で addressable な相手のみ返す。
-    conversation_id は決して返さない。"""
+```python
+# トップレベル糖衣 — プロセス全体の既定 AgentKnock に委譲
+import agentknock
+agentknock.configure_default(mailbox=..., registry=..., probe=...)  # 任意
+agentknock.register_self("my-agent", target_id="agent-1", role="worker")
+msg_id = agentknock.send("peer-agent", "hello", sender="my-agent")
+agentknock.unregister_self("my-agent")  # キルスイッチ
+```
+
+公開トップレベル API（`agentknock/__init__.py`）:
+
+```python
+def send(recipient: str, content: str, *, sender: str) -> str: ...
+def list_recipients() -> list[Recipient]: ...
+def register_self(alias: str, target_id: str, *,
+                  role: str = "",
+                  capabilities: Capabilities | None = None,
+                  ttl_sec: float = 86400.0) -> None: ...
+def unregister_self(alias: str) -> bool: ...   # キルスイッチ
+def configure_default(*, mailbox=None, registry=None, probe=None) -> None: ...
 
 class Recipient(TypedDict):
-    alias: str            # send() の `recipient` にはこれを渡す
+    alias: str            # send() の recipient にはこれを渡す
     role: str
-    capabilities: dict    # アダプタの capability contract をそのまま反映
+    capabilities: dict    # アダプタの capability contract を反映
 ```
 
 ### 送信者が制御できるもの、できないもの
 
 | フィールド | 送信者制御？ | 注記 |
 | :--- | :--- | :--- |
-| `recipient` | はい | `list_recipients` が返した alias のみ: `ALIAS_PATTERN` に合致し、かつ `UUID_REGEX` に**合致しない**こと（生の conversation ID は `is_valid_alias()` および MCP スキーマ両方で拒否されます）。 |
+| `recipient` | はい | `list_recipients` が返した alias のみ: `ALIAS_PATTERN` に合致し、かつ `UUID_REGEX` に**合致しない**こと。生 target id は `is_valid_alias()` および MCP スキーマ両方で拒否されます。 |
 | `content` | はい | 自由記述。メッセージ本体。署名付き JSON チャネルを通ります。 |
 | `sender` | はい | 自己申告の識別子（書式: `^[a-zA-Z0-9_-]{1,64}$`）。帰属の**主張**であって認証ではありません。 |
-| 起床ナッジ文字列 | **いいえ** | 受信側ローカルの `WAKE_NUDGE_CATALOG` から解決されます。`CONIN$` に書き込まれるバイトを送信者は左右できません。 |
-| 対象 PID | **いいえ** | アダプタ内で、受信側の自己公開 presence ロックから解決。送信者は PID を一切見ません。 |
-| 対象 `conversation_id` | **いいえ** | アダプタ内部のみ。公開 API から完全に隠蔽。 |
-| 出力言語 | **いいえ** | 受信側ローカルのナッジで固定。[i18n § Layer B 削除](#layer-b送信者提供ロケール-v1-では意図的に不在) 参照。 |
+| 起床ナッジのバイト列 | **いいえ** | 各 DeliveryAdapter 内部でローカル定数から解決。**型レベル: `wake()` は text 引数を持ちません**（A1）。受信側の起床チャネルに届くバイトを送信者は左右できません。 |
+| target `target_id` | **いいえ** | `AliasRegistry` ／ `LivenessProbe` 内部で解決。公開 API からは完全に隠蔽。 |
+| 出力言語 | **いいえ** | 帰属不能な起床チャネル（例: `AgyDeliveryAdapter`）では受信側ローカルで固定。帰属可能チャネルでは JSON メタデータに乗り、アダプタの `honor_sender_locale` capability に従う。 |
 
-右半分の「できない」側こそ**構造的な R2** の意味するところです: 公開 API には、送信者が `CONIN$` に影響を与えうるフィールド・キーワード引数・環境変数が**存在しません**。能力そのものが呼び出し可能な形で存在しないのです。
+右半分の「できない」側こそ**構造的な R2** の意味するところです: 公開 API には、送信者が起床チャネルに影響を与えうるフィールド・キーワード引数・環境変数が**存在しません**。能力そのものが呼び出し可能な形で存在しないのです。
 
 ### MCP ツールスキーマ
 
-公開関数は MCP ツールとしても露出されます。**スキーマに現れるものが送信者が送れるものであり、それ以外はアダプタに届きません。** ここで capability contract が機械的に強制されます——アダプタが honor 不能と宣言したフィールド（例: `surface_custom_json: No` の時のロケールヒント）は、そもそもツールスキーマに入れません。
+公開関数は MCP ツール（`python -m agentknock.mcp_server --stdio` で起動）としても露出されます。**スキーマに現れるものが送信者が送れるものであり、それ以外はアダプタに届きません。** ここで capability contract が機械的に強制されます——アダプタが honor 不能と宣言したフィールド（例: `surface_custom_json: No` 時のロケールヒント）はそもそもツールスキーマに入れません。
 
 ```jsonc
 // MCP tool: send
@@ -117,14 +278,15 @@ class Recipient(TypedDict):
 }
 
 // MCP tool: list_recipients — 入力なし
-{ "name": "list_recipients", "input_schema": { "type": "object", "additionalProperties": false } }
+{ "name": "list_recipients",
+  "input_schema": { "type": "object", "additionalProperties": false } }
 ```
 
-`additionalProperties: false` は load-bearing です: アダプタが対応表明していないフィールドを送信者が紛れ込ませられないことを、MCP 層で強制します。
+`additionalProperties: false` は load-bearing: アダプタが対応表明していないフィールドを送信者が紛れ込ませられないことを、MCP 層で強制します。
 
 ### UUID 隠蔽
 
-conversation ID はアダプタ内部でのみ使う**内部**識別子です。送信者は決して目にせず、`list_recipients` は alias のみを返します。alias は**プロセス再起動をまたいで安定**（registry ファイルに存在）であるのに対し、conversation ID は安定ではありません。これにより送信者は受信側のライフサイクルから切り離され、R1 の「自己公開ランデブー」原則に**安定した公開アドレス**が与えられます。
+内部 target id（例: `agy.exe` の conversation UUID）はアダプタ内部でのみ使う**内部**識別子です。送信者は決して目にせず、`list_recipients` は alias のみを返します。alias は**プロセス再起動をまたいで安定**（registry に存在）であるのに対し、内部 target id は通常安定ではありません。
 
 ---
 
@@ -132,49 +294,55 @@ conversation ID はアダプタ内部でのみ使う**内部**識別子です。
 
 ### R1 — ランデブー印の逆引き限定
 
-**対象は、対象自身が公開した成果物からのみ addressable である。** agentknock はそのうち 2 つを組み合わせて受信者を解決します: **opt-in registry エントリ**（alias → capabilities）と、**presence ロック**（生存性）。agentknock は候補探索のために**決して**プロセス列挙を行いません。`Process32First` も、`tasklist` の走査も、「presence ロックを握っているウィンドウならどれでも起こす」もありません。
+**対象は、対象自身が公開した成果物からのみ addressable である。** agentknock は **`AliasRegistry`**（opt-in 自己広告）と **`LivenessProbe`**（このターゲットはまだ生きているか？）の 2 つから受信者を解決します。agentknock は候補探索のために**決して**プロセス・ウィンドウ・ネットワークピアを列挙しません——`Process32First` も、`tasklist` の走査も、「lock を握っているプロセスならどれでも起こす」もありません。
 
-これが R1 であり、2 箇所で強制されます:
+2 箇所で強制されます:
 
-- 公開 API 側: `list_recipients` は registry ディレクトリを読みます——プロセステーブルではありません。登録していないプロセスは addressable ではありません。
-- アダプタ内部: PID 解決は対象自身の presence ロック（パス指定の逆引き）を使い、走査しません。
+- 公開 API 側: `list_recipients` は設定された `AliasRegistry` を読みます——プロセステーブルではありません。
+- アダプタ内部: 対象解決は台帳の alias → `target_id` マッピングを使い、必要なら `LivenessProbe` に照会してから起床します。
 
-### Registry スキーマ
+### 3 条件フィルタ
+
+エントリが `list_recipients` から返されるのは、**次の 3 条件すべて**が満たされる時だけです:
+
+1. 台帳エントリが存在し、整形式である、**かつ**
+2. `ttl` が未失効、**かつ**
+3. 設定された `LivenessProbe.is_alive(target_id)` が `True` を返す。
+
+既定構成:
+
+| 構成 | AliasRegistry | LivenessProbe |
+|:---|:---|:---|
+| `pip install agentknock` Quickstart | `FileSystemAliasRegistry`（`~/.agentknock/registry/`） | `AlwaysAliveProbe`（常に真 — Quickstart 向け） |
+| ファイルロック付きピア | 同上 | `FileLockLivenessProbe`（`.lock` ファイル ＋ OS レベル生存判定） |
+| `pip install "agentknock[win32]"` ＋ `AgyDeliveryAdapter` | 同上 | `AgyLockLivenessProbe`（Restart Manager による `presence/<cid>.lock` の逆引き） |
+
+### 台帳エントリのスキーマ
 
 到達可能になりたいエージェントは次を公開します:
 
 ```
-~/.gemini/antigravity-cli/registry/<alias>.json
+~/.agentknock/registry/<alias>.json
 {
-  "alias": "gemini-ipc",                      // ^[a-zA-Z0-9_-]{1,64}$
-  "conversation_id": "<uuid>",                // アダプタ内部用; agentknock 外へは決して出ない
-  "role": "IPC core",
+  "alias": "hello-recv",
+  "target_id": "recv-1",                      // アダプタ内部用; agentknock 外へは出ない
+  "role": "greeter",
   "capabilities": {                           // アダプタの capability contract を反映
-    "surface_custom_json": false,
-    "honor_sender_locale": false,
-    "injected_input_trust_label": "USER_EXPLICIT"
+    "surface_custom_json": true,
+    "honor_sender_locale": true,
+    "injected_input_trust_label": "ATTRIBUTED_METADATA"
   },
-  "ttl": "2026-11-09T00:00:00Z"               // ISO-8601 の失効時刻（UTC）
+  "ttl": "2026-11-13T00:00:00Z"               // ISO-8601 の失効時刻（UTC）
 }
 ```
 
-登録は**自己広告のみ**です: エージェントは自分自身を登録し、あるエージェントが他を登録することはできません。失効したエントリは自動的に外れます。
-
-### `list_recipients` のフィルタ
-
-エントリが返されるのは、**次の 3 条件すべて**が満たされる時だけです:
-
-1. registry ファイルが存在し、整形式である、**かつ**
-2. `ttl` が未失効、**かつ**
-3. `conversation_id` が指す presence ロックを、生存中のプロセスが保持している。
-
-registry エントリだけでは addressable になりません。未登録の presence ロックだけでも addressable になりません。ランデブーは両方必要です。
+登録は**自己広告のみ**です: エージェントは自分自身を登録し、あるエージェントが他を登録することはできません。`unregister_self(alias)` は**キルスイッチ**です——一度呼べばエントリは即座に外れ、以降の discovery と送信はどちらも止まります。失効エントリは自動的に外れます。
 
 ### alias の書式
 
 alias は次の両方を満たさなければなりません:
 
-1. `ALIAS_PATTERN`（`^[a-zA-Z0-9_-]{1,64}$`）に合致すること。`ALLOWED_SENDERS` の書式と整合させ、送信者帰属と受信者アドレッシングで同一の識別子正規表現を共有します。**かつ**
+1. `ALIAS_PATTERN`（`^[a-zA-Z0-9_-]{1,64}$`）に合致すること（`ALLOWED_SENDERS` と整合）、**かつ**
 2. `UUID_REGEX`（`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`）に**合致しない**こと。生の conversation ID は alias として**無効**です——アダプタ内部の値であり、recipient として使うことは決して許されません。拒否は `is_valid_alias()` および MCP ツールスキーマ両方で強制されます。
 
 ---
@@ -183,140 +351,179 @@ alias は次の両方を満たさなければなりません:
 
 > これはアダプタ作者が宣言しなければならないものです。この 3 フィールドに基づいて、プラットフォームは「OSS 利用者があなたのターゲットに対して何を安全にできるか」を決めます。
 
-起床機構は `agy.exe` を越えて一般化しますが、その*安全性*は無料では転用できません——各ターゲットのハーネスが入力をどうタグ付け・surface するかに依存します。よって各ターゲットアダプタは以下の第一級フィールドを**必ず**宣言しなければなりません。これらはドキュメントではなく load-bearing で、プラットフォームが送信者に何を試させるかを決定します。
-
 | フィールド | 意味 |
 | :--- | :--- |
 | `surface_custom_json` | このエージェントはカスタム JSON フィールドを作業文脈に surface するか。**No** なら、送信者提供のメタデータ（例: ロケールヒント）はエージェントに届かず honor 不能——送信者が何を送っても。 |
 | `honor_sender_locale` | 送信者提供の出力ロケール選好を honor するか。`surface_custom_json: Yes` の時のみ意味を持つ。**既定: No。** |
-| `injected_input_trust_label` | ターゲットが `CONIN$` 注入入力に付ける信頼ラベル（`USER_EXPLICIT`／低信頼 `SYSTEM` タグ等）。エージェント側規約（`AGENTS.ja.md`）の厳格度を決める。 |
+| `injected_input_trust_label` | ターゲットが起床チャネル経由の入力に付ける信頼ラベル（`CONIN$` 相当のキーストローク配送なら `USER_EXPLICIT`、署名付きインプロセス callback や署名付き outbox JSON なら `ATTRIBUTED_METADATA`、OS レベルシステムメッセージなら `SYSTEM`、...）。このターゲット向けの `AGENTS.md` 規約の厳格度を決める。 |
 
-### リファレンスアダプタ — `agy.exe`（Antigravity CLI, Go 製）
+### 同梱リファレンスアダプタ
 
-```yaml
-target: agy.exe
-surface_custom_json: No          # カスタム JSON フィールドは <SYSTEM_MESSAGE> にコピーされない
-honor_sender_locale: No          # surface_custom_json: No から演繹される
-injected_input_trust_label: USER_EXPLICIT   # 注入テキスト == 人間オーナーのキー入力
-```
+| アダプタ | インストール形態 | `surface_custom_json` | `honor_sender_locale` | `injected_input_trust_label` |
+|:---|:---|:---|:---|:---|
+| `CallbackDeliveryAdapter`（`adapters/callback.py`） | base | Yes | Yes | `ATTRIBUTED_METADATA` |
+| `OutboxDeliveryAdapter`（`adapters/outbox.py`、BR1） | base | Yes | Yes | `ATTRIBUTED_METADATA` |
+| `AgyDeliveryAdapter`（`adapters/agy.py`） | `[win32]` | No | No | `USER_EXPLICIT` |
 
-**帰結（好みでなく演繹）:** `agy.exe` はカスタム JSON フィールドを surface せず、*かつ* language mirroring が帯域外ヒントを打ち消すため、`agy.exe` の出力言語は実質**100 % ローカル専権**です——ローカルのナッジ定数のみで決まります。したがって `force-local` が唯一正しい既定であり、これは実装事実から導かれます。
+`AgyDeliveryAdapter` の完全な scope contract は **[`adapters/SCOPE_AGY.md`](./adapters/SCOPE_AGY.md)** を参照してください。
 
-### 契約が OSS 利用者にどう現れるか
+**帰結（好みでなく演繹）:** `agy.exe` はカスタム JSON フィールドを surface せず、*かつ* language mirroring が帯域外ヒントを打ち消すため、`agy.exe` の出力言語は実質 100 % ローカル専権です——ローカルのナッジ定数のみで決まります。したがって `force-local` が*このアダプタに限り*唯一正しい既定であり、これは実装事実から導かれます。`Yes/Yes` を宣言するアダプタは送信者提供ロケールを advisory として surface することがあります。
 
-`list_recipients` が返す各 `Recipient` の `capabilities` dict は、アダプタが宣言した契約をそのままコピーしたものです。MCP クライアントが「この相手にロケールヒントを送れるか？」を問うときは、`honor_sender_locale` を読んでローカルで判断できます。`send` の MCP ツールスキーマ**自体**も、アダプタ契約の和集合から導出されます: **どの**アダプタも `honor_sender_locale: Yes` を宣言していなければ、`send` ツールには `locale` フィールドが存在しない——OSS 利用者は、誰も honor できないものを要求することすらできません。
+### 新アダプタの実装
+
+**[`adapters/ADAPTER_AUTHORING.md`](./adapters/ADAPTER_AUTHORING.md)** のチェックリストを参照。義務事項:
+
+1. 3 フィールドの capability を宣言する。
+2. `wake(target_id) -> bool` を **text 引数なし**で実装する（A1）。
+3. `consumes_marker_on_wake` を選ぶ（`wake()` が同期的に配送完了するか、受信側が自分でマーカーを消費する out-of-process 型か？ R-M1）。
+4. アダプタの隣に `SCOPE_<ADAPTER>.md` を公開する（B4）。
+5. `agentknock.testing.assert_send_cannot_reach(...)` を用いて自アダプタの forbidden set で R2 構造テストを同梱する（B1）。
 
 ---
 
 ## セキュリティ不変条件
 
-これらは全タスク・全アダプタで成立します（実装とテストで強制。本節はそれが実装する契約です）。
-
 ### R1 — ランデブー印の逆引き限定
 
-上の [Discovery（opt-in 台帳）](#discoveryopt-in-台帳-不変条件-r1) を参照。要約: PID／alias 解決は、対象自身が公開した成果物のみを起点に進めます。プロセス列挙は永遠に行いません。
+上の [Discovery](#discoveryopt-in-台帳-不変条件-r1) 参照。
 
-### R2 — `CONIN$` に送信者制御のバイトを乗せない
+### R2 — 起床チャネルに送信者制御のバイトを乗せない（型レベル）
 
-R2 は**公開 API 形状の構造的特性**です。`send()` の静的コールグラフは `_adapter` にも `_win_console` にも到達しません——送信者は `CONIN$` 注入を、偶然も含めて、いかなるフィールド・キーワード引数・環境変数からも呼び出せません。これが L2 分割の目的です: alias 解決は純粋なファイル読取関数 `_resolve_alias_from_registry` に置かれ、これは `_adapter` も Win32 コードも import しません。ゆえに `send()` の AST／import closure には mailbox 書き込みとこの registry 読取しか含まれません。`CONIN$` 注入は**受信側**の orochi ウォッチャが、署名付き JSON を検証したのちに*のみ*実行するもので、その時書き込まれるナッジは受信側ローカルの `WAKE_NUDGE_CATALOG` のみから解決され、`msg_data` から導出されることは決してありません。
+v0.3 で R2 は**型レベル**にも持ち上げられた**構造的特性**です。`DeliveryAdapter` Protocol は次のように定義されます:
 
-これは v0.1 の保証（「規約＋レビュー」）より強力です。v0.1 では `inject_console_input` が公開面から呼び出し可能で、R2 は `on_undelivered_file_created` がメッセージ由来のテキストを渡さないことに依存していました。v0.2 では inject のコールグラフ全体が、*構造的に*送信者から到達不能です。これを固定する専用テスト ([`tests/test_d4_r2_r1_invariants.py::test_r2_send_callgraph_no_win_console_conin`](./tests/test_d4_r2_r1_invariants.py)) が `console_injector.py` をパースし `send()` の AST を推移的に追跡、`{_adapter, _win_console, CONIN$, AttachConsole, find_agy_pid_by_conversation_id, inject_console_input, find_pid_by_lock_path, _default_adapter}` のいずれかに到達するか動的 import が現れた時点で fail-closed します。実行時の裏付けとして `test_r2_send_with_win_console_unavailable` (`sys.modules` から `_win_console` を削除しても `send` が import 可能であることを確認) と `test_r2_public_namespace_only_send_list_recipients` (`dir(agentknock) == {"send", "list_recipients"}` を強制) の 2 テストが併置されています。
+```python
+class DeliveryAdapter(Protocol):
+    def wake(self, target_id: str) -> bool: ...
+```
+
+**text 引数はそもそも存在しません。** アダプタ作者が wake 呼び出しに送信者由来文字列を渡す経路は、メソッドの形状として*不可能*です。各アダプタはローカル起床ナッジカタログを**自身の内部**に保持します（例: `AgyDeliveryAdapter` は i18n `WAKE_NUDGE_CATALOG` をコンストラクタ引数のロケール設定から解決）。
+
+さらに、`send()` の静的コールグラフは`DeliveryAdapter` には一切到達しません。AST テスト
+[`tests/test_d4_r2_r1_invariants.py::test_r2_send_callgraph_no_win_console_conin`](./tests/test_d4_r2_r1_invariants.py)
+が `send()` を host するモジュールをパースし AST を推移的に追跡し、禁止シンボルまたは動的 import が現れた時点で fail-closed します。**新規アダプタ**向けには標準テストヘルパを用意しています:
+
+```python
+from pathlib import Path
+from agentknock.testing import assert_send_cannot_reach
+
+def test_r2_for_my_adapter():
+    assert_send_cannot_reach(
+        Path("agentknock/core/mailbox.py"),
+        entry_func_name="send",
+        forbidden_symbols=frozenset({"my_adapter", "my_wake_api", "..."}),
+    )
+```
+
+アダプタに R2 テストを同梱することは Adapter Authoring Checklist の**義務**です（B1）。
+
+core 側の実行時裏付け 2 本: `test_r2_send_with_win_console_unavailable`（`sys.modules` から `_win_console` を抜いても `send` が import 可能）と `test_r2_public_namespace_only_send_list_recipients`（トップレベルモジュールの公開名を強制）が併置されています。
 
 ### 起床シグナルとペイロードの分離
 
-`CONIN$` が配送するのは起床ナッジのみ。送信者制御のコンテンツ（タスク・タイトル・メタデータ）は JSON ファイルに置かれ、帰属可能な `<SYSTEM_MESSAGE>` チャネル経由でエージェントが読みます。
+起床チャネルが配送するのは起床シグナルのみ。送信者制御のコンテンツ（タスク・タイトル・メタデータ）は署名付き JSON ファイルに置かれ、帰属可能な `<SYSTEM_MESSAGE>` チャネル経由でエージェントが読みます。
 
-### 2 つの層、1 つではない問題
+### ガバナンス／機構の二層モデル
 
-- **ガバナンス層 — 分離統治。** 起床ナッジの i18n と出力言語の i18n は信頼境界の反対側にあります。R2 は*起床ナッジにのみ*発火し、出力言語の選好は注入バイトを変えないため R2 に抵触しません。
-- **機構層 — language mirroring による結合。** LLM は直前の `<USER_REQUEST>`（＝注入ナッジ）の言語に強く同調します。ゆえにナッジの言語が*機構的に*出力言語を決めます。だからこそ出力言語指示は**ローカルのナッジ定数に束ねられ**、運任せや送信者任せにしません。
-
----
-
-## scope contract（適用範囲）
-
-機構は `AttachConsole` + `WriteConsoleInputW` に依存します。その境界は**「ConPTY で壊れる」ではありません**——ConPTY ホストのアプリも実コンソール入力バッファを持ち、到達*可能*です。真の境界を第一級仕様として明示しないと、ツールは「なぜか不安定」なものに成り下がります。
-
-### サポート対象
-- **実コンソールを持つ**対話型 CLI/TUI プロセス（従来の conhost、Windows Terminal / ConPTY、`cmd`、`pwsh` 等）で、`stdin` を**コンソール入力**として読むもの。
-- 注入側（受信側ウォッチャ）と**同一ユーザーセッション**・**同一インテグリティレベル**で動作しているもの。
-
-### 対象外（設計上、動作しない）
-- `stdin` が**パイプ／リダイレクト**のプロセス（バイトストリームを読むためコンソール入力レコードが届かない——`WriteConsoleInput` は到達しない）。*これが唯一最大の実制約。*
-- **コンソールを持たない**プロセス（GUI アプリ、`DETACHED_PROCESS` / `CREATE_NO_WINDOW`）。
-- **昇格**ターゲットや**別セッション**（クロスインテグリティ・クロスセッション注入は不可——これは制限でなくセキュリティ特性）。
-- **WSL**（Linux 側——Win32 コンソールではない）、および**リモート**ターゲット。
-
-これはツールを恒久的に**デスクトップローカル・同一セッション・コンソール接続**のトランスポートに固定します。クロスマシン／ヘッドレス／CI のトランスポートには*決してなりません*——それでよいのです。その領分は従来のメッセージキューのもの。適用範囲は市場（人間が自分のデスクトップのウィンドウで走らせる端末 AI エージェント）と一致し、それはまさに契約を満たす集合です。
+- **ガバナンス層 — 分離統治。** 起床ナッジの i18n と出力言語の i18n は信頼境界の反対側にあります。R2 は起床ナッジにのみ発火し、出力言語の選好は注入バイトを変えないため R2 に抵触しません。
+- **機構層 — language mirroring。** `AgyDeliveryAdapter` では LLM が直前の `<USER_REQUEST>` の言語に強く同調するため、出力言語指示をローカルナッジ定数に束ねて mirroring を味方につけます。これは*アダプタ内部*の関心事（B3）であり、帰属可能チャネルを持つアダプタにはそもそもこの結合がありません。
 
 ---
 
-## 国際化（i18n）
+## マーカー・ライフサイクル（R-M1 … R-M4）
 
-OSS は世界中で使われるため、既定は**英語**で、言語選択はすべて**ローカル専権**です——送信者は一切影響しません。
+受信側ウォッチャは `wake()` の後に `undelivered/<id>` マーカーを無条件で削除**しません**。v0.3 は「1.5 秒で早すぎる刈り取り」バグを防ぐためのライフサイクル契約を追加しました。
 
-```python
-# 英語デフォルト。キー = output_locale。
-# ナッジ本文はその言語で記述し、かつ明示的指示を併記するため、
-# language mirroring を敵にせず味方につける。
-WAKE_NUDGE_CATALOG = {
-  "en": "A new message arrived. Review your inbox and begin. Respond in English.",
-  "ja": "受信メッセージを確認して作業に着手してください。日本語で応答してください。",
-  # zh / ko / es / fr / de ...
-}
-DEFAULT_LOCALE = "en"
+### R-M1 — マーカー削除権は受信側専有
 
-# 解決順（送信者入力は決して参照しない）:
-#   1. ローカル上書き:  env CONINJECT_LOCALE  /  ライブラリ引数 locale="ja"
-#   2. フォールバック:   "en"（不正/未対応 -> 無条件に en、fail-closed）
-#
-# wake_locale と output_locale は独立に解決、各々ローカルのみ:
-#   env CONINJECT_WAKE_LOCALE   -> resolve_wake_locale()    （人間が読む言語）
-#   env CONINJECT_OUTPUT_LOCALE -> resolve_output_locale()  （エージェントが応答する言語）
-#   いずれも CONINJECT_LOCALE、次いで "en" にフォールバック。
+`DeliveryAdapter.consumes_marker_on_wake == False`（例: `AgyDeliveryAdapter`、*ターゲットが out-of-process* でマーカーを自分で読むアダプタ）の場合、ウォッチャは `wake()` の後に**決してマーカーを unlink しません**。ACK は受信側の仕事です。
+
+`consumes_marker_on_wake == True`（例: `CallbackDeliveryAdapter`、ウォッチャスレッド内でコールバックを同期実行＝配送完了となるアダプタ）の場合のみ、ウォッチャは成功後にマーカーを unlink します——コールバックそのものが ACK だったからです。
+
+### At-Most-Once（In-Memory Cooldown）
+
+ウォッチャはメモリ上に `_woken_at: dict[message_id, monotonic_time]` を保持し、同一 message_id に対しては `rewake_cooldown_sec`（既定 **60 秒**）の間、再起床をスキップします。マーカーが残り続けても二重配送は発生しません。
+
+### R-M2 — 送信側による Watcher 代行の禁止
+
+`send()` はファイル投函のみです。ウォッチャは必ず受信プロセス内（または長命の受信側 companion）で動かします。送信側が受信側の代わりにウォッチャを走らせることは、本契約が防いでいるライフサイクルバグを再発させます。
+
+### R-M3 / R-M4 — 孤児マーカー Reaper と `audit.jsonl` 観測性
+
+バックグラウンド Reaper は、`stale_marker_ttl_sec`（既定 **300 秒**）経過後、または受信側が既に消費済みと記録した場合にのみ、孤児マーカーを清掃します。`audit.jsonl` のイベント遷移:
+
+```
+CREATED → WOKEN → CONSUMED            # happy path
+CREATED → WOKEN → RETRY → … → CONSUMED
+CREATED → WOKEN → RETRY → … → DEAD_LETTER
+CREATED → … → REAPED                  # 孤児清掃
 ```
 
-- **出力言語はローカル指示で決定論的に固定**し、mirroring 任せにしません。mirroring は追い風で、不一致時は明示指示が勝ちます。
-- `wake_locale`（人間オーナーが読む）と `output_locale`（エージェントが応答する）は**独立したローカル設定**です（両方ローカル → R2 は不変）。既定では同一値。
-- 人間可読性 ≠ 出力言語の場合、ナッジを**バイリンガルにしない**（mirroring を濁す）。`CONIN$` は単一言語に保ち、人間向けテキストは**可視インジケータ**（注入経路の*外*のローカル UI）で示します。
+シーケンスレベルの詳細は [`WORK_FLOW.md`](./WORK_FLOW.md) を参照。
 
-### Layer B（送信者提供ロケール）— v1 では意図的に不在
+---
 
-送信者提供の出力ロケール（JSON の `requestedOutputLocale`）は **v1 で削除**されており、この不在は**意図的で、見落としではありません**:
+## Scope contract — アダプタ毎
 
-1. `agy.exe` はカスタム JSON フィールドをエージェント文脈に surface しない（`surface_custom_json: No`）——フィールドは届かない。
-2. 仮に届いても、ローカルナッジの **language mirroring** が上書きする。
+agentknock の core は cross-platform（純 Python、Win32 非依存）です。各 delivery adapter が自分の scope contract を公開します:
 
-ゆえにこの機能は二重に不活性でありながら攻撃面を増やします。将来**再導入**されるとしても、**advisory-only**・**ローカルカタログ従属**・**`surface_custom_json: Yes` かつ `honor_sender_locale: Yes` を契約で宣言するアダプタ限定**で、しかもローカルポリシーが上書き可能な検証済み enum *ヒント*として、決してコマンドとしてではなく、`en` に fail-closed します。その日が来たとき、それは**オプショナルな** MCP ツールフィールドとして現れます——コアには入りません。
+- **[`adapters/SCOPE_AGY.md`](./adapters/SCOPE_AGY.md)** — `AgyDeliveryAdapter` の scope（Windows 限定・実コンソール同一セッション同一インテグリティ・昇格/WSL/リモート/パイプ stdin 非対応）。
+- `CallbackDeliveryAdapter` — cross-platform、インプロセスのみ（他プロセスには届かない）。
+- `OutboxDeliveryAdapter` — cross-platform、共有 FS 上で cross-process。scope は「両エージェントが mailbox ディレクトリを読み書きできる場所ならどこでも」。
+
+アダプタ作者は自アダプタ用に `SCOPE_<ADAPTER>.md` を**必ず**同梱します（B4）——Adapter Authoring Checklist を参照。
+
+---
+
+## 国際化（i18n）— v0.3 ではアダプタスコープ（B3）
+
+v0.3 では i18n 起床ナッジカタログは**アダプタ内部**の関心事であり、core レベルの設定ではありません。起床チャネルが*帰属不能*（ゆえに language mirroring 頼みで出力言語を誘導せざるを得ない）アダプタでのみ意味を持ちます——`AgyDeliveryAdapter` が典型例です。帰属可能アダプタ（callback、outbox、HTTP）にはカタログは不要です: 出力ロケールは帰属可能チャネルを通じて JSON メタデータに乗り、R2 に抵触せずにエージェントが読めます。
+
+`AgyDeliveryAdapter` の場合、カタログと解決規則は `agentknock/adapters/agy.py` に存在します:
+
+```python
+# ローカル上書きのみ — 送信者入力は決して参照しない:
+#   1. env CONINJECT_WAKE_LOCALE / CONINJECT_OUTPUT_LOCALE / CONINJECT_LOCALE
+#   2. AgyDeliveryAdapter(wake_locale="ja", output_locale="ja")
+#   3. "en"（fail-closed; 不正/未対応 → en）
+```
+
+### Layer B（送信者提供ロケール）— アダプタ毎
+
+送信者提供の出力ロケールは意図的に **core には存在しません**。`surface_custom_json: Yes` **かつ** `honor_sender_locale: Yes` を契約で宣言するアダプタでは surface することがあります——ただし、ローカルポリシーが上書き可能な検証済み enum *advisory* としてのみ、コマンドとしてではなく、`en` に fail-closed します。
 
 ---
 
 ## 運用ガイド
 
-フォーカスを奪わない特性は、機能であると同時にリスクです——注入は設計上、人間に不可視です。以下の 3 つの統制は人間の監督を取り戻すもので、**運用上の必須要件**であり任意オプションではありません。
+フォーカスを奪わない特性は、機能であると同時にリスクです——帰属不能な起床チャネルへの注入は設計上、人間に不可視です。以下の 3 つの統制は人間の監督を取り戻すもので、**運用上の必須要件**であり任意オプションではありません。
 
 ### 1. 監査ログ（追記専用）
-各起床は `who → whom · when · message-id · result` を**追記専用**・改ざん検知可能なログに記録します。これは対象ウィンドウに可視の痕跡を残さない行為の、否認防止記録です。ログは受信側ウォッチャが書き出します（起床を発火させうる唯一のコンポーネント）。
+
+各起床は `who → whom · when · message-id · result` を**追記専用**・改ざん検知可能なログ（既定 `~/.agentknock/audit.jsonl`）に記録します。これは対象ウィンドウに可視の痕跡を残さない可能性のある行為の、否認防止記録です。ログは受信側ウォッチャが書き出します。
 
 ```
-2026-11-08T12:14:07Z  wake  sender=claude-code  recipient=gemini-ipc  msg=4b1e…  pid=13820  result=OK
+2026-11-12T12:14:07Z  event=WOKEN   sender=claude-code  recipient=gemini-ipc  msg=4b1e…  result=OK
+2026-11-12T12:14:09Z  event=CONSUMED  msg=4b1e…
 ```
 
 ### 2. 可視インジケータ
-ローカル UI 要素（ステータスライン／トレイ／バンド——注入経路の**外**）が、人間オーナー自身の `wake_locale` で、起床が起きていることと誰がトリガーしたかを表示します。これは *UI ブラインド*攻撃（オーナーが読めない言語へ出力を強制し、不審挙動の監査を遅らせる）への対策です（出力言語の権限をローカルに保つ——i18n 参照——がもう半分の防御）。
+
+ローカル UI 要素（ステータスライン／トレイ／バンド——注入経路の**外**）が、人間オーナー自身の `wake_locale` で、起床が起きていることと誰がトリガーしたかを表示します。これは *UI ブラインド*攻撃（オーナーが読めない言語へ出力を強制し、不審挙動の監査を遅らせる）への対策です。
 
 ### 3. キルスイッチ
-全起床注入を即座に停止する単一のローカル無効化。既存のループガード（無限ループ防止の `sender == "user"` スキップ＋レート制限／ループ検出）と組み合わせ、起床ストームを抑え込みます。リトライ上限を超えた失敗メッセージは無限に再試行せず、`.system_generated/messages/dead_letter/<id>.json` に隔離されます。
+
+`unregister_self(alias)` が discovery レイヤのキルスイッチです——一度呼べばエントリは外れ、以降の discovery と送信先選択はどちらも即座に止まります。既存のループガード（無限ループ防止の `sender == "user"` スキップ ＋ レート制限 / ループ検出）と `rewake_cooldown_sec` を組み合わせ、起床ストームを抑え込みます。リトライ上限超過の失敗メッセージは `dead_letter/<id>.json` に隔離され、無限再試行はしません。
 
 ---
 
 ## 脅威モデル（一行）
 
-> 正当性は*何を注入できるか*では証明されません——機構はキーロガー型マルウェアと同一です。正当性は**制約**で証明されます: 対象自身が公開した成果物からのみ受信者を解決（R1 — 決して列挙しない）、ローカルで無害な1ビットの起床ナッジのみ注入（R2 — 決して送信者バイトを乗せない）、あらゆる指示は署名付きチャネルを通す、そして人間が見て止められる状態を保つ。
+> 正当性は*何を注入できるか*では証明されません——機構はキーロガー型マルウェアと同一です。正当性は**制約**で証明されます: 対象自身が公開した成果物からのみ受信者を解決（R1 — 決して列挙しない）、起床チャネルはローカルで無害な 1 ビットの起床シグナルしか運べない（R2 — 型レベル: `wake()` に text 引数そのものが無い）、あらゆる指示は署名付きチャネルを通す、そして人間が見て止められる状態を保つ。
 
 ---
 
 ## 関連資料
+- **[`adapters/ADAPTER_AUTHORING.md`](./adapters/ADAPTER_AUTHORING.md)** — 新アダプタ作者が満たすべきチェックリスト（R2 テスト、Scope doc、capability 宣言、マーカーライフサイクル選択）。
+- **[`adapters/SCOPE_AGY.md`](./adapters/SCOPE_AGY.md)** — リファレンス `AgyDeliveryAdapter` の scope contract。
 - [`WORK_FLOW.md`](./WORK_FLOW.md) — ディレクトリのライフサイクル、シーケンス図、関数別仕様、単体テスト仕様。
 - [`AGENTS.ja.md`](./AGENTS.ja.md) — **注入される側**のエージェントが従う規約。
-- [`../orochi/DESIGN-0001-agentknock-positioning.md`](../orochi/DESIGN-0001-agentknock-positioning.md) — 現在の二読者 API 形状を決定した ADR。
