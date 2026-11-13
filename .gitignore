@@ -14,3 +14,6 @@ wheels/
 # Secrets / local env
 .env
 .env.local
+
+# Local team wiki (private operational notes, agent UUIDs, runbooks — never commit to OSS)
+wiki/
