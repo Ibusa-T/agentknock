@@ -213,7 +213,6 @@ def _query_image_basename_py(unsigned long pid):
 cpdef object find_process_by_lock_path(
     str lock_path,
     object allowed_images = None,
-    *,
     bint same_session_only = True,
 ):
     """
@@ -371,7 +370,6 @@ cpdef tuple inject_console_input_verified(
     str text = "進めて",
     bint send_enter = True,
     double submit_delay_sec = 0.08,
-    *,
     object allowed_images = None,
 ):
     """
@@ -416,6 +414,7 @@ cpdef tuple inject_console_input_verified(
     cdef DWORD err_code = 0
     cdef WORD scan_return = 0
     cdef Py_ssize_t i = 0
+    cdef int nogil_status = 0
 
     try:
         # [Step 1] Pin target PID in Windows kernel by holding h_proc
@@ -450,9 +449,8 @@ cpdef tuple inject_console_input_verified(
                 if not AttachConsole(pid_dw):
                     err_code = GetLastError()
                     AttachConsole(ATTACH_PARENT_PROCESS)
-                    return (False, "attach_console_failed", <int>err_code)
-
-                try:
+                    nogil_status = 1  # attach_console_failed
+                else:
                     h_conin = CreateFileW(
                         CONIN_DEVICE_NAME,
                         GENERIC_READ | GENERIC_WRITE,
@@ -464,45 +462,55 @@ cpdef tuple inject_console_input_verified(
                     )
                     if h_conin == INVALID_HANDLE_VALUE or h_conin == NULL:
                         err_code = GetLastError()
-                        return (False, "conin_open_failed", <int>err_code)
+                        nogil_status = 2  # conin_open_failed
+                    elif WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
+                        nogil_status = 3  # process_already_exited
+                    else:
+                        if text_w != NULL and text_len > 0:
+                            total_events = <DWORD>(text_len * 2)
+                            records = <INPUT_RECORD*>malloc(sizeof(INPUT_RECORD) * total_events)
+                            if records == NULL:
+                                err_code = 0
+                                nogil_status = 4  # write_console_input_failed
+                            else:
+                                for i in range(text_len):
+                                    _init_key_record(&records[i * 2], text_w[i], 0, 0, 1)
+                                    _init_key_record(&records[i * 2 + 1], text_w[i], 0, 0, 0)
 
-                    if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
-                        return (False, "process_already_exited", 0)
+                                if not WriteConsoleInputW(h_conin, records, total_events, &written):
+                                    err_code = GetLastError()
+                                    nogil_status = 4  # write_console_input_failed
 
-                    if text_w != NULL and text_len > 0:
-                        total_events = <DWORD>(text_len * 2)
-                        records = <INPUT_RECORD*>malloc(sizeof(INPUT_RECORD) * total_events)
-                        if records == NULL:
-                            return (False, "write_console_input_failed", 0)
+                        if nogil_status == 0 and send_enter:
+                            if delay_ms > 0:
+                                Sleep(delay_ms)
 
-                        for i in range(text_len):
-                            _init_key_record(&records[i * 2], text_w[i], 0, 0, 1)
-                            _init_key_record(&records[i * 2 + 1], text_w[i], 0, 0, 0)
+                            scan_return = <WORD>MapVirtualKeyW(VK_RETURN, MAPVK_VK_TO_VSC)
+                            _init_key_record(&enter_records[0], WCHAR_CR, VK_RETURN, scan_return, 1)
+                            _init_key_record(&enter_records[1], WCHAR_CR, VK_RETURN, scan_return, 0)
 
-                        if not WriteConsoleInputW(h_conin, records, total_events, &written):
-                            err_code = GetLastError()
-                            return (False, "write_console_input_failed", <int>err_code)
+                            if not WriteConsoleInputW(h_conin, enter_records, 2, &written):
+                                err_code = GetLastError()
+                                nogil_status = 4  # write_console_input_failed
 
-                    if send_enter:
-                        if delay_ms > 0:
-                            Sleep(delay_ms)
-
-                        scan_return = <WORD>MapVirtualKeyW(VK_RETURN, MAPVK_VK_TO_VSC)
-                        _init_key_record(&enter_records[0], WCHAR_CR, VK_RETURN, scan_return, 1)
-                        _init_key_record(&enter_records[1], WCHAR_CR, VK_RETURN, scan_return, 0)
-
-                        if not WriteConsoleInputW(h_conin, enter_records, 2, &written):
-                            err_code = GetLastError()
-                            return (False, "write_console_input_failed", <int>err_code)
-
-                    return (True, "ok", 0)
-                finally:
                     if records != NULL:
                         free(records)
+                        records = NULL
                     if h_conin != INVALID_HANDLE_VALUE and h_conin != NULL:
                         CloseHandle(h_conin)
+                        h_conin = INVALID_HANDLE_VALUE
                     FreeConsole()
                     AttachConsole(ATTACH_PARENT_PROCESS)
+
+            if nogil_status == 1:
+                return (False, "attach_console_failed", <int>err_code)
+            elif nogil_status == 2:
+                return (False, "conin_open_failed", <int>err_code)
+            elif nogil_status == 3:
+                return (False, "process_already_exited", 0)
+            elif nogil_status == 4:
+                return (False, "write_console_input_failed", <int>err_code)
+            return (True, "ok", 0)
         finally:
             CloseHandle(h_proc)
     finally:
@@ -515,7 +523,6 @@ cpdef bint inject_console_input(
     str text = "進めて",
     bint send_enter = True,
     double submit_delay_sec = 0.08,
-    *,
     object expected_start_time = None,
     object allowed_images = None,
 ):

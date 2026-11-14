@@ -16,10 +16,16 @@ adapter.
 
 ## Install form
 
-Opt-in extra: `pip install "agentknock[win32]"`. Pulls in the native Cython
-extension (`_win_console.pyd`) and the `AgyLockLivenessProbe`. **The agentknock
-core is not touched by this extra** — installing it only *adds* the agy
-adapter; removing it does not break anything else.
+Opt-in extra: `pip install "agentknock[win32]"`. Uses the native Cython
+extension (`_win_console.pyd`) when built, and **since v0.3.1 ships an integrated
+pure-Python `ctypes` fallback (`agentknock.adapters._win_console_ctypes`)** inside
+the package alongside `AgyLockLivenessProbe` (without runtime `pyximport` or a root
+`_win_console.py` shim), so the adapter runs out-of-the-box even without a C
+compiler or `.pyd` binary. If neither `_win_console` backend is available,
+`AgyLockLivenessProbe.is_alive()` returns `False` (fail-closed) rather than
+assuming lock presence alone indicates liveness. **The agentknock core is not
+touched by this extra** — installing it only *adds* the agy adapter; removing it
+does not break anything else.
 
 ## Capability declaration
 
@@ -105,27 +111,23 @@ Supported locales: `en, ja, zh, ko, es, fr, de`.
 
 ## R2 test (B1)
 
-Shipped alongside the adapter as
-`tests/test_r2_agy_adapter.py::test_r2_send_cannot_reach_agy_adapter`:
+Enforced by `agentknock.testing.assert_send_cannot_reach` and `DEFAULT_FORBIDDEN_SYMBOLS` across `tests/test_t_c_adapters.py::test_b1_assert_send_cannot_reach_passes`, `tests/test_d4_r2_r1_invariants.py::test_r2_send_callgraph_no_win_console_conin`, and `tests/test_v031_toctou_security.py::test_r2_forbidden_symbols_include_v031_toctou_symbols`:
 
 ```python
 from pathlib import Path
-from agentknock.testing import assert_send_cannot_reach
+from agentknock.testing import DEFAULT_FORBIDDEN_SYMBOLS, assert_send_cannot_reach
 
 def test_r2_send_cannot_reach_agy_adapter():
     assert_send_cannot_reach(
-        Path("agentknock/core/mailbox.py"),       # module hosting send()
+        Path("agentknock/core/mailbox.py"),       # or agentknock/console_injector.py
         entry_func_name="send",
-        forbidden_symbols=frozenset({
+        forbidden_symbols=DEFAULT_FORBIDDEN_SYMBOLS | frozenset({
             "AgyDeliveryAdapter",
-            "_win_console",
-            "AttachConsole",
-            "WriteConsoleInputW",
-            "find_pid_by_lock_path",
-            "inject_console_input",
         }),
     )
 ```
+
+`DEFAULT_FORBIDDEN_SYMBOLS` (v0.3.1) covers both Win32 console symbols and TOCTOU identity/process APIs (`_adapter`, `_win_console`, `_win_console_ctypes`, `CONIN$`, `AttachConsole`, `WriteConsoleInputW`, `OpenProcess`, `GetProcessTimes`, `wake`, `_inject`, `_find_pid`, `_find_process_identity`, `find_agy_pid_by_conversation_id`, `_find_agy_process_by_conversation_id`, `inject_console_input`, `inject_console_input_verified`, `find_pid_by_lock_path`, `find_process_by_lock_path`, `_default_adapter`).
 
 The test fails closed on dynamic imports and on any transitive reach into
 the adapter. Treat a failure as a stop-ship: any new path from `send()` into
@@ -133,6 +135,8 @@ Win32 territory is an R2 violation by construction.
 
 ## Security notes specific to this adapter
 
+- **PID Reuse (TOCTOU) Protection (v0.3.1)**: Lock resolution (`find_process_by_lock_path`) binds `(pid, ProcessStartTime)` with TS session & `agy.exe` image name verification, failing closed (`None`) if 0 or >=2 distinct lock holders exist. Console injection (`inject_console_input_verified`) pins the kernel process `HANDLE` across liveness, exact 64-bit `GetProcessTimes` match, image check, `AttachConsole` / `CONIN$`, and `WriteConsoleInputW` (fail-closed `False` if `expected_start_time` is omitted or `<= 0`). `AgyLockLivenessProbe.is_alive()` also fails closed to `False` when no Win32 backend is available or verification fails.
+- **Structured Failure Audit**: `AgyDeliveryAdapter` / `_AgyAdapter` records `last_wake_detail` (`reason`, `win32_error`, `pid`, `verified_start_time`, `backend`), which `WatchDaemon` emits as `wake_reason` and `win32_error` in `audit.jsonl` for `RETRY` / `DEAD_LETTER` events.
 - The `CONIN$` channel is **non-attributable** at the receiver: injected text
   arrives tagged `source: USER_EXPLICIT`, indistinguishable from the human
   owner's own keystrokes. This is why R2 is type-level here and the wake
@@ -155,7 +159,7 @@ Win32 territory is an R2 violation by construction.
 
 ### インストール形態
 
-opt-in extra: `pip install "agentknock[win32]"`。ネイティブ Cython 拡張（`_win_console.pyd`）と `AgyLockLivenessProbe` を導入します。**agentknock の core はこの extra によって一切変化しません**——インストールは agy アダプタを*追加*するだけで、アンインストールしても他に影響しません。
+opt-in extra: `pip install "agentknock[win32]"`。ネイティブ Cython 拡張（`_win_console.pyd`）が利用可能な場合は優先ロードし、未コンパイル環境向けに pure-Python `ctypes` フォールバック（`agentknock/adapters/_win_console_ctypes.py`）と `AgyLockLivenessProbe`（Win32 バックエンド無効時や検証不能時は `False` に fail-closed）を組み込んでいます。**agentknock の core はこの extra によって一切変化しません**——インストールは agy アダプタを*追加*するだけで、アンインストールしても他に影響しません。
 
 ### Capability 宣言
 
@@ -220,31 +224,30 @@ AgyDeliveryAdapter(wake_locale="ja", output_locale="ja")
 
 ### R2 テスト（B1）
 
-アダプタと併置して `tests/test_r2_agy_adapter.py::test_r2_send_cannot_reach_agy_adapter` として同梱:
+`agentknock.testing.assert_send_cannot_reach` と `DEFAULT_FORBIDDEN_SYMBOLS` を用い、`tests/test_t_c_adapters.py::test_b1_assert_send_cannot_reach_passes`、`tests/test_d4_r2_r1_invariants.py::test_r2_send_callgraph_no_win_console_conin`、`tests/test_v031_toctou_security.py::test_r2_forbidden_symbols_include_v031_toctou_symbols` で検証:
 
 ```python
 from pathlib import Path
-from agentknock.testing import assert_send_cannot_reach
+from agentknock.testing import DEFAULT_FORBIDDEN_SYMBOLS, assert_send_cannot_reach
 
 def test_r2_send_cannot_reach_agy_adapter():
     assert_send_cannot_reach(
-        Path("agentknock/core/mailbox.py"),       # send() を host するモジュール
+        Path("agentknock/core/mailbox.py"),       # または agentknock/console_injector.py
         entry_func_name="send",
-        forbidden_symbols=frozenset({
+        forbidden_symbols=DEFAULT_FORBIDDEN_SYMBOLS | frozenset({
             "AgyDeliveryAdapter",
-            "_win_console",
-            "AttachConsole",
-            "WriteConsoleInputW",
-            "find_pid_by_lock_path",
-            "inject_console_input",
         }),
     )
 ```
+
+`DEFAULT_FORBIDDEN_SYMBOLS` (v0.3.1) には従来の Win32 コンソールシンボルに加え、TOCTOU 対策・プロセス検証シンボル（`_adapter`, `_win_console`, `_win_console_ctypes`, `CONIN$`, `AttachConsole`, `WriteConsoleInputW`, `OpenProcess`, `GetProcessTimes`, `wake`, `_inject`, `_find_pid`, `_find_process_identity`, `find_agy_pid_by_conversation_id`, `_find_agy_process_by_conversation_id`, `inject_console_input`, `inject_console_input_verified`, `find_pid_by_lock_path`, `find_process_by_lock_path`, `_default_adapter`）が含まれます。
 
 このテストは動的 import とアダプタへの推移的到達に対して fail-closed します。失敗は stop-ship 扱い: `send()` から Win32 領域への新たな経路は、構造的に R2 違反です。
 
 ### このアダプタ固有のセキュリティ注意
 
+- **PID 再利用（TOCTOU）対策（v0.3.1）**: ロック解決（`find_process_by_lock_path`）は `(pid, ProcessStartTime)` を TS セッションおよび `agy.exe` イメージ名検証付きで束縛し、保持者が 0 件または 2 件以上の場合は `None` に fail-closed します。コンソール注入（`inject_console_input_verified`）はカーネル `HANDLE` を生存確認・64bit `GetProcessTimes` 完全一致検証・イメージ検証・`AttachConsole` / `CONIN$`・`WriteConsoleInputW` 完了までピン留めします（`expected_start_time` 欠落または `<= 0` のレガシ呼び出しは `False` に fail-closed）。また `AgyLockLivenessProbe.is_alive()` も Win32 バックエンド無効時や検証不能時は `False` に fail-closed します。
+- **構造化失敗監査**: `AgyDeliveryAdapter` / `_AgyAdapter` は `last_wake_detail`（`reason`, `win32_error`, `pid`, `verified_start_time`, `backend`）を記録し、`WatchDaemon` は `RETRY` / `DEAD_LETTER` イベントの `wake_reason`・`win32_error` として `audit.jsonl` に出力します。
 - `CONIN$` チャネルは受信側で**帰属不能**です: 注入テキストは `source: USER_EXPLICIT` としてタグ付けされ、人間オーナー自身のキー入力と区別できません。これが本アダプタで R2 が型レベルであり、起床ナッジがローカル定数でなければならない理由です——README § R2 と `AGENTS.md` を参照。
 - 受信側 `AGENTS.md` 規約は必須です。これに従わないターゲットエージェント（起床ターンのコンソール入力を untrusted として扱わず、指示を署名付き JSON からのみ読む規約を守らないもの）は、上記 OS／コンソール前提が満たされていても scope 外です。
 - 運用三点セット（監査ログ、可視インジケータ、`unregister_self` 経由のキルスイッチ）はこのアダプタで必須であり、オプションではありません——README § 運用ガイド参照。

@@ -1,6 +1,6 @@
-# agentknock v0.2 ワークフロー & 単体テスト仕様書 (`WORK_FLOW.md`)
+# agentknock v0.2 / v0.3.1 ワークフロー & 単体テスト仕様書 (`WORK_FLOW.md`)
 
-- **対象パッケージ**: [`agentknock`](../agentknock/) (公開 L3) + [`console_injector.py`](../console_injector.py) (L2/L3 実装) + [`_watcher.py`](../_watcher.py) (受信側常駐 D2) + [`_registry.py`](../_registry.py) (純 L2 D3) + [`agentknock/_adapter.py`](../agentknock/_adapter.py) (非公開 L1) + [`_win_console.pyx`](../_win_console.pyx) (nogil L0)
+- **対象パッケージ**: [`agentknock`](../agentknock/) (公開 L3) + [`console_injector.py`](../console_injector.py) (L2/L3 実装) + [`_watcher.py`](../_watcher.py) (受信側常駐 D2) + [`_registry.py`](../_registry.py) (純 L2 D3) + [`agentknock/_adapter.py`](../agentknock/_adapter.py) (非公開 L1) + [`agentknock/adapters/agy.py`](../agentknock/adapters/agy.py) (v0.3/v0.3.1 公開 L1 アダプタ) + [`_win_console.pyx`](../_win_console.pyx) (nogil L0) + [`agentknock/adapters/_win_console_ctypes.py`](../agentknock/adapters/_win_console_ctypes.py) (純 Python `ctypes` L0 フォールバック)
 - **連携フレームワーク**: `orochi`（ファイル監視エンジン）— `_watcher.ResidentWatcher.enqueue` に接続する
 - **対象環境**: Windows 10/11 + Python ≥ 3.10 (`uv run python`)
 - **D0 契約**: [`_contract.py`](../_contract.py) が型と不変条件を凍結保持する
@@ -73,7 +73,7 @@ sequenceDiagram
     L3-->>Sender: message_id (str)
 ```
 
-**R2 構造保証**: このシーケンス全体は `_adapter`/`_win_console`/`CONIN$`/`AttachConsole` に静的コールグラフ上到達しない (`tests/test_d4_r2_r1_invariants.py::test_r2_send_callgraph_no_win_console_conin` が AST 解析で fail-closed に強制)。送信側は mailbox 書込のみで即時完了し、受信者プロセスへは一切接触しない。
+**R2 構造保証**: このシーケンス全体は `_adapter`/`_win_console`/`_win_console_ctypes`/`CONIN$`/`AttachConsole`/`OpenProcess`/`GetProcessTimes`/`find_process_by_lock_path`/`inject_console_input_verified`/`_find_process_identity` に静的コールグラフ上到達しない (`tests/test_d4_r2_r1_invariants.py::test_r2_send_callgraph_no_win_console_conin` および `tests/test_v031_toctou_security.py::test_r2_forbidden_symbols_include_v031_toctou_symbols` が `DEFAULT_FORBIDDEN_SYMBOLS` を用いた AST 解析で fail-closed に強制)。送信側は mailbox 書込のみで即時完了し、受信者プロセスへは一切接触しない。
 
 #### 1.3.b 受信側: `ResidentWatcher.on_undelivered` (D2 → L1 → L0)
 
@@ -82,8 +82,8 @@ sequenceDiagram
     participant Orochi as orochi FS Watcher
     participant Watcher as ResidentWatcher [D2 常駐]
     participant Validator as validate_and_load_message [L2]
-    participant Adapter as _AgyAdapter.wake [L1 非公開]
-    participant Win as _win_console.pyx (nogil) [L0]
+    participant Adapter as _AgyAdapter / AgyDeliveryAdapter.wake [L1]
+    participant Win as _win_console.pyx / _win_console_ctypes.py [L0]
     participant Target as 宛先 agy.exe (自プロセス)
     participant Audit as audit.jsonl / dead_letter/
 
@@ -97,29 +97,30 @@ sequenceDiagram
     else 検証通過
         Watcher->>Adapter: wake(conversation_id, wake_locale=local, output_locale=local)
         Note over Watcher,Adapter: R2: msg_data は wake() に一切渡さない<br/>wake_locale/output_locale はローカル env/定数のみ
-        Adapter->>Win: find_pid_by_lock_path(presence/<cid>.lock)
-        Win-->>Adapter: PID (or None)
-        alt PID None
-            Adapter-->>Watcher: False → 指数バックオフ再試行 (base=0.5s, factor=2.0, cap=8.0s, max=5回)
-            Watcher->>Audit: audit RETRY
-        else PID 取得
+        Adapter->>Win: find_process_by_lock_path(presence/<cid>.lock)
+        Win-->>Adapter: (PID, start_time_u64) (or None)
+        alt (PID, start_time_u64) None
+            Adapter-->>Watcher: False (adapter.last_wake_detail に失敗理由を記録) → 指数バックオフ再試行 (base=0.5s, factor=2.0, cap=8.0s, max=5回)
+            Watcher->>Audit: audit RETRY (wake_reason, win32_error)
+        else (PID, start_time_u64) 取得
             Adapter->>Adapter: resolve_wake_prompt(wake_locale, output_locale) → ローカル定数カタログ由来
-            Adapter->>Win: inject_console_input(PID, wake_text, Enter) [nogil]
+            Adapter->>Win: inject_console_input_verified(PID, start_time_u64, wake_text, Enter)
+            Note over Win: OpenProcess ピン留め + WaitForSingleObject(0) + GetProcessTimes<br/>+ QueryFullProcessImageNameW("agy.exe") + 同一 TS セッション検証
             Win->>Target: AttachConsole + WriteConsoleInputW → CONIN$ 直接書込 (フォーカス非奪取)
-            Win-->>Adapter: True
-            Adapter-->>Watcher: True
-            Watcher->>Watcher: ack_grace 1.5s 待機 → marker 残存なら atomic unlink
+            Win-->>Adapter: (ok, wake_reason, win32_error) → adapter.last_wake_detail 更新
+            Adapter-->>Watcher: True (失敗時は False → 指数バックオフ RETRY & audit 記録)
+            Watcher->>Watcher: ack_grace 1.5s 待機 → marker 残存なら atomic unlink (v0.3 R-M1 では受信側消費)
             Watcher->>Audit: audit DELIVERED
             Target->>Target: 起床 → AGENTS.md ルールに従い <SYSTEM_MESSAGE>.json を読込
             Target->>FS: undelivered/<Message-ID> を消費 & read.json 追記
         end
     end
     opt max_attempts 枯渇
-        Watcher->>Audit: dead_letter 隔離 (tier=local|central) + audit DEAD_LETTER
+        Watcher->>Audit: dead_letter 隔離 (tier=local|central) + audit DEAD_LETTER (wake_reason, win32_error)
     end
 ```
 
-**R2 構造保証**: 受信側は `ResidentWatcher` → `_AgyAdapter.wake` → `_win_console.inject_console_input` の経路で `CONIN$` に触れるが、注入する `text` は `resolve_wake_prompt()` で解決されるローカル定数カタログ (`WAKE_NUDGE_CATALOG` / `WAKE_BODY_CATALOG` / `OUTPUT_DIRECTIVE_CATALOG`) 由来のみ。`msg_data` から導出・連結・補間しない (`tests/test_t3_security.py::test_r2_wake_prompt_never_derives_from_msg_data` が強制)。
+**R2 構造保証**: 受信側は `ResidentWatcher` / `WatchDaemon` → `_AgyAdapter.wake` / `AgyDeliveryAdapter.wake` → `_win_console.inject_console_input_verified`（Cython `.pyd` または `agentknock/adapters/_win_console_ctypes.py`）の経路で `CONIN$` に触れるが、注入する `text` は `resolve_wake_prompt()` で解決されるローカル定数カタログ (`WAKE_NUDGE_CATALOG` / `WAKE_BODY_CATALOG` / `OUTPUT_DIRECTIVE_CATALOG`) 由来のみ。`msg_data` から導出・連結・補間しない (`tests/test_t3_security.py::test_r2_wake_prompt_never_derives_from_msg_data` が強制)。また、失敗時は `adapter.last_wake_detail` に `reason` / `win32_error` が保持され、`WatchDaemon` が `audit.jsonl` の `RETRY` / `DEAD_LETTER` イベントへ `wake_reason` と `win32_error` を記録する（本文や起床ナッジ等の秘匿情報は記録しない）。
 
 **R1 保証**: 送信側 `send()` は `registry/<alias>.json` に opt-in 登録された受信者にしか到達できない。`list_recipients()` は (TTL 未失効 ∧ `presence/<conversation_id>.lock` 生存) で絞り込み、`conversation_id` を返さない (`tests/test_d4_r2_r1_invariants.py::test_r1_list_recipients_filters_unregistered`)。
 
@@ -179,28 +180,30 @@ sequenceDiagram
 | 25 | `ResidentWatcher._wait_or_consume_marker` | `marker_path` | `None` | ack_grace 間 `agy.exe` の dequeue を待機。残存なら atomic `unlink` (再起動越し at-most-once 保証) |
 | 26 | `ResidentWatcher._append_audit` | `*, event, message_id, sender, recipient, attempts, reason, tier?, dead_letter_path?` | `None` | `audit.jsonl` に JSON 一行追記 (append-only) |
 
-### 2.5 L1 — 非公開アダプタ (`agentknock/_adapter.py`)
+### 2.5 L1 — 非公開アダプタ (`agentknock/_adapter.py`) & 公開アダプタ (`agentknock/adapters/agy.py`)
 
-**`__all__` 非公開**。受信側常駐ウォッチャと診断 CLI (`doctor` / `--undelivered-file`) のみが遅延 import する。
+`_adapter.py` は **`__all__` 非公開**。受信側常駐ウォッチャ (`ResidentWatcher` / `WatchDaemon`) と診断 CLI (`doctor` / `--undelivered-file`) のみが遅延 import する。v0.3.1 ではネイティブ Cython 拡張 `_win_console` が未ビルドの環境でも `agentknock.adapters._win_console_ctypes` に自動フォールバックし (`pyximport` とルート `_win_console.py` スタブは廃止)、`last_wake_detail` の記録 (`WatchDaemon` 経由で `audit.jsonl` の `wake_reason` / `win32_error` へ反映) を行う。
 
 | # | クラス/メソッド | 引数 | 戻り値 | 責務 | 層 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 27 | `_AgyAdapter.__init__` | `*, base_dir, brain_dir, presence_dir, registry_dir` | - | テスト用ディレクトリ差し替え seam | L1 |
-| 28 | `_AgyAdapter._find_pid` | `conversation_id: str` | `Optional[int]` | monkeypatch seam (`test_adapter_wake_find_pid_inject_granularity`) — 内部で `_find_agy_pid_by_conversation_id` を呼び、Restart Manager API (`rstrtmgr.dll`) で `presence/<cid>.lock` の保持 PID を逆引き | L1 → L0 |
-| 29 | `_AgyAdapter._inject` | `pid: int, text: str, *, send_enter=True, submit_delay_sec=0.08` | `bool` | monkeypatch seam — 内部で `_inject_console_input` を呼び、`AttachConsole` + `WriteConsoleInputW` で `CONIN$` に書込 (nogil) | L1 → L0 |
-| 30 | `_AgyAdapter.wake` | `conversation_id, *, wake_locale, output_locale, send_enter=True, submit_delay_sec=0.08` | `bool` | `_find_pid` → `_inject(resolve_wake_prompt(...))`。**R2 不変条件**: `text` は必ずローカル定数カタログ由来 (msg_data 非依存)。`ResidentWatcher` の唯一の本番呼び出し先 | L1 |
-| 31 | `_find_agy_pid_by_conversation_id` | `conversation_id, *, presence_dir` | `Optional[int]` | `_win_console.find_pid_by_lock_path(str(lock_path))` の Python 側ラッパ | L1 |
-| 32 | `_inject_console_input` | `target_pid, text=None, send_enter, submit_delay_sec, *, wake_locale, output_locale` | `bool` | `_win_console.inject_console_input` の Python 側ラッパ。`text=None` 時は `resolve_wake_prompt` でローカル解決 | L1 |
-| 33 | `_run_doctor` | `adapter` | `dict` | 診断 CLI 実装 — presence ロック生存数、台帳 active/inactive alias、実効ロケール等を JSON で返す |
+| 27 | `_AgyAdapter.__init__` / `AgyDeliveryAdapter.__init__` | `*, base_dir, brain_dir, presence_dir, registry_dir, ...` (`AgyDeliveryAdapter` は `allowed_images=("agy.exe",)` 等の検証設定も保持) | - | テスト用ディレクトリ差し替え seam と `last_wake_detail` 初期化 | L1 |
+| 28 | `_AgyAdapter._find_process_identity` / `_find_pid` | `conversation_id: str` | `Optional[tuple[int, int]]` / `Optional[int]` | `_find_process_identity` は `find_process_by_lock_path` により `(pid, start_time_u64)` を返却。`_find_pid` は後方互換・monkeypatch seam | L1 → L0 |
+| 29 | `_AgyAdapter._inject` / `AgyDeliveryAdapter._inject` | `pid: int, text: str, *, expected_start_time=None, send_enter=True, submit_delay_sec=0.08` | `bool` | monkeypatch seam — `expected_start_time` (`> 0`) 必須の fail-closed (`"invalid_pid_or_start_time"`)。`inject_console_input_verified` を呼び結果を `last_wake_detail` に記録 | L1 → L0 |
+| 30 | `_AgyAdapter.wake` / `AgyDeliveryAdapter.wake` | `conversation_id, *, wake_locale, output_locale, send_enter=True, submit_delay_sec=0.08` | `bool` | `_find_process_identity` → `_inject(pid, resolve_wake_prompt(...), expected_start_time=start_time)`。見つからない・曖昧な場合は `"lock_holder_not_found_or_ambiguous"` を `last_wake_detail` に記録し fail-closed。**R2 不変条件**: `text` は必ずローカル定数カタログ由来 (msg_data 非依存) | L1 |
+| 31 | `_find_agy_process_by_conversation_id` / `_find_agy_pid_by_conversation_id` | `conversation_id, *, presence_dir=None, allowed_images=DEFAULT_ALLOWED_IMAGES` | `Optional[tuple[int, int]]` / `Optional[int]` | `_win_console.find_process_by_lock_path` / `find_pid_by_lock_path` の Python 側ラッパ | L1 |
+| 32 | `_inject_console_input` | `target_pid, text=None, send_enter=True, submit_delay_sec=0.08, *, expected_start_time=None, allowed_images=DEFAULT_ALLOWED_IMAGES, wake_locale=None, output_locale=None` | `bool` | `_win_console.inject_console_input` の Python 側ラッパ (`expected_start_time` 未指定・`<= 0` は fail-closed)。`text=None` 時は `resolve_wake_prompt` でローカル解決 | L1 |
+| 33 | `_run_doctor` | `adapter` | `dict` | 診断 CLI 実装 — presence ロック生存数、台帳 active/inactive alias、実効ロケール等を JSON で返す | L1 |
 
-### 2.6 L0 — ネイティブ Cython 拡張 (`_win_console.pyx`)
+### 2.6 L0 — ネイティブ Cython 拡張 (`_win_console.pyx`) / ctypes フォールバック (`agentknock/adapters/_win_console_ctypes.py`)
 
-GIL 完全解放 (`with nogil:`) で `<windows.h>` / `<restartmanager.h>` を直接操作する。Python コードからはこれら2関数のみが公開される。
+Cython 拡張 `_win_console.pyx` (GIL 完全解放 `with nogil:`、`<windows.h>` / `<restartmanager.h>` 直叩き) を優先ロードし、未コンパイル環境では純 Python の `agentknock/adapters/_win_console_ctypes.py` に自動フォールバックする。v0.3.1 では両バックエンドとも TOCTOU (PID 再利用) 対策の 4 点検証・HANDLE ピニング・fail-closed 設計を実装する。
 
 | # | 関数名 | 引数 | 戻り値 | 責務 |
 | :--- | :--- | :--- | :--- | :--- |
-| 34 | `_win_console.find_pid_by_lock_path` | `lock_path: str` | `int` or `None` | Restart Manager API (`rstrtmgr.dll`) で指定 lock ファイルを保持している agy.exe PID を逆引き |
-| 35 | `_win_console.inject_console_input` | `target_pid: int, text: str, send_enter: bool, submit_delay_sec: float` | `bool` | `AttachConsole(pid)` → `WriteConsoleInputW(CONIN$)` で text + Enter を注入 → `FreeConsole` で親コンソール復帰 (nogil) |
+| 34 | `_win_console.find_process_by_lock_path` | `lock_path: str, allowed_images=None, *, same_session_only=True` | `Optional[tuple[int, int]]` | Restart Manager API (`rstrtmgr.dll`) + TS セッション一致検証 + `OpenProcess` + `WaitForSingleObject(0)` + `GetProcessTimes` + `QueryFullProcessImageNameW` (既定 `agy.exe`) で検証し、ユニーク保持者が 1 件のみの場合 `(pid, start_time_u64)` を返す (0 件または複数候補時は `None` / fail-closed) |
+| 35 | `_win_console.inject_console_input_verified` | `target_pid: int, expected_start_time: int, text="進めて", send_enter=True, submit_delay_sec=0.08, *, allowed_images=None` | `tuple[bool, str, int]` | カーネル `HANDLE` を最終 `CloseHandle` まで保持 (HANDLE pinning) し、生存確認・`GetProcessTimes` 64bit FILETIME 完全一致・イメージ名検証・`AttachConsole` / `CONIN$` 取得・注入直前の再生存確認後に `WriteConsoleInputW` で入力注入し `(ok, reason, win32_err)` を返す |
+| 36 | `_win_console.find_pid_by_lock_path` | `lock_path: str, allowed_images=None` | `Optional[int]` | `find_process_by_lock_path` の互換ラッパ (PID のみ返却) |
+| 37 | `_win_console.inject_console_input` | `target_pid: int, text="進めて", send_enter=True, submit_delay_sec=0.08, *, expected_start_time=None, allowed_images=None` | `bool` | 互換 API (v0.3.1 以降は `expected_start_time` 必須。未指定または `<= 0` の場合は即時 `False` の fail-closed) |
 
 ### 2.7 MCP stdio サーバ (`agentknock/mcp_server.py`)
 
@@ -239,12 +242,13 @@ D0 の正本契約。D1-D5 はこれを import してのみ型・名前を参照
 テストモジュール:
 - [`tests/test_d4_r2_r1_invariants.py`](../tests/test_d4_r2_r1_invariants.py) — R2 構造/動的/名前空間 + R1 台帳絞り込み + L1 seam 粒度
 - [`tests/test_t3_security.py`](../tests/test_t3_security.py) — T3 セキュリティ (R2 境界維持 + sender/title 硬化)
+- [`tests/test_v031_toctou_security.py`](../tests/test_v031_toctou_security.py) — v0.3.1 セキュリティ強化 (HANDLE ピニング・`ProcessStartTime` 厳密一致・`RmGetList` 許可イメージ/TS セッション/曖昧時 fail-closed・`AgyLockLivenessProbe` fail-closed・`audit.jsonl` 構造化理由記録・R2 禁止シンボル網羅・実サブプロセス時刻一致検証)
 
 ### 3.2 【カテゴリ 1】公開 API 面の構造的 R2 保証 (`tests/test_d4_r2_r1_invariants.py`)
 
 | テスト名 | 観点 | 期待 |
 | :--- | :--- | :--- |
-| `test_r2_send_callgraph_no_win_console_conin` | AST で `console_injector.send()` を根に到達可能性を推移的に追跡。禁止集合 `{_adapter, _win_console, CONIN$, AttachConsole, find_agy_pid_by_conversation_id, inject_console_input, find_pid_by_lock_path, _default_adapter}` に到達しないこと。動的 import は fail-closed で検出 | 禁止集合への到達なし、動的 import なし |
+| `test_r2_send_callgraph_no_win_console_conin` | AST で `console_injector.send()` を根に到達可能性を推移的に追跡。v0.3.1 禁止集合 `{_adapter, _win_console, _win_console_ctypes, CONIN$, AttachConsole, find_agy_pid_by_conversation_id, _find_agy_process_by_conversation_id, inject_console_input, inject_console_input_verified, find_pid_by_lock_path, find_process_by_lock_path, _find_process_identity, _default_adapter}` に到達しないこと (`test_b1_assert_send_cannot_reach_passes` / `test_r2_forbidden_symbols_include_v031_toctou_symbols` でも `WriteConsoleInputW`, `OpenProcess`, `GetProcessTimes` 等を含む `DEFAULT_FORBIDDEN_SYMBOLS` を検証)。動的 import は fail-closed で検出 | 禁止集合への到達なし、動的 import なし |
 | `test_r2_send_with_win_console_unavailable` | `sys.modules` から `_win_console` を削除後に `from agentknock import send` が ImportError にならない | import 成功 (= L0 非依存) |
 | `test_r2_public_namespace_only_send_list_recipients` | `set(dir(agentknock)) - 内部名 == {"send", "list_recipients"}` | 公開名が 2 つのみ |
 
