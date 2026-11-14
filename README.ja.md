@@ -16,7 +16,7 @@ core は**純 Python・外部依存なし**で動作します。`pip install age
 ## この README は誰のためか
 
 - **OSS 利用者** — コード・LLM function call・MCP ツールから agentknock で*送信する*人またはエージェント。まず **[Install & Quickstart](#install--quickstart-qs1)** を、次に **[公開 API](#公開-api利用者向け)** を読んでください。
-- **アダプタ作者** — `agy.exe` 以外の新しいターゲットエージェントへ agentknock を拡張する人。**[capability contract](#アダプタ作者向け-capability-contract)** と **[Adapter Authoring Checklist](./adapters/ADAPTER_AUTHORING.md)** を読んでください。
+- **アダプタ作者** — `agy.exe` 以外の新しいターゲットエージェントへ agentknock を拡張する人。**[capability contract](#アダプタ作者向け-capability-contract)** と **[Adapter Authoring Checklist](./docs/adapters/ADAPTER_AUTHORING.md)** を読んでください。
 
 両読者は以下のセクション——セキュリティ不変条件、マーカー・ライフサイクル、運用ガイド、脅威モデル——を共通して読んでください。
 
@@ -143,7 +143,7 @@ python -m agentknock watch --target my-agent --adapter callback --notifier polli
 
 1. **発見と送信**: 送信側エージェントは `agentknock.list_recipients()` で到達可能な協調相手を確認し、`agentknock.send(recipient=..., content=..., sender=...)` で署名付きタスクを投函します。
 2. **フォーカス非強奪の起床**: 受信側マシンで動作する `WatchDaemon` が `undelivered/` へのマーカー着信を検知し、`adapter.wake(target_id)` により作業中の人間オーナーの前面ウィンドウを奪わずに `CONIN$` へ起床ノックを送ります。
-3. **エージェント規約に基づく自律処理 (`AGENTS.md`)**: 起床したエージェントは呼び鈴を認識し、能動的に `<SYSTEM_MESSAGE>` ペイロードから指示をロードします。処理完了後に `undelivered/` マーカーを削除して `read.json` に記録します（R-M1 マーカー所有権）。
+3. **エージェント規約に基づく自律処理 ([`docs/AGENTS.ja.md`](./docs/AGENTS.ja.md))**: 起床したエージェントは呼び鈴を認識し、能動的に `<SYSTEM_MESSAGE>` ペイロードから指示をロードします。処理完了後に `undelivered/` マーカーを削除して `read.json` に記録します（R-M1 マーカー所有権）。
 
 ---
 
@@ -184,7 +184,7 @@ v0.3 ではこの原則は**型レベル**でも強制されるようになり�
 | 拡張点 | 役割 | 既定実装 | 差し替えるのは... |
 |:---|:---|:---|:---|
 | **`Notifier`** | mailbox への新着マーカー検知 | `watchdog` が import 可能なら `WatchdogNotifier`、そうでなければ `PollingNotifier`（既定 500 ms、env `AGENTKNOCK_POLL_INTERVAL_SEC`）に自動フォールバック（B6） | カスタム FS イベント／Kafka 風トリガー／HTTP webhook 等をトリガー源にしたい時 |
-| **`DeliveryAdapter`** | 検証済みメッセージ到着時にターゲットを起こす。**`wake(target_id: str) -> bool`** — text 引数なし（A1、型レベル R2） | `CallbackDeliveryAdapter`（インプロセス、Quickstart）／`OutboxDeliveryAdapter`（ファイルブリッジ配送、BR1: Gemini → Claude）／`AgyDeliveryAdapter`（オプション、`[win32]` extra）`CONIN$` 注入 | 新ターゲットエージェント対応時。[Adapter Authoring Checklist](./adapters/ADAPTER_AUTHORING.md) 参照 |
+| **`DeliveryAdapter`** | 検証済みメッセージ到着時にターゲットを起こす。**`wake(target_id: str) -> bool`** — text 引数なし（A1、型レベル R2） | `CallbackDeliveryAdapter`（インプロセス、Quickstart）／`OutboxDeliveryAdapter`（ファイルブリッジ配送、BR1: Gemini → Claude）／`AgyDeliveryAdapter`（オプション、`[win32]` extra）`CONIN$` 注入 | 新ターゲットエージェント対応時。[Adapter Authoring Checklist](./docs/adapters/ADAPTER_AUTHORING.md) 参照 |
 | **`AliasRegistry`** | opt-in 自己広告台帳、**Mailbox から独立（A3）**。`register` / `unregister` / `resolve` / `list_active` を公開 | `FileSystemAliasRegistry`（`~/.agentknock/registry/<alias>.json`）／`InMemoryAliasRegistry`（テスト用） | 複数マシン間で共有 SQLite やネットワーク台帳を使いたい時 |
 | **`LivenessProbe`** | ターゲットの生存判定（A2）。`is_alive(target_id) -> bool` | `AlwaysAliveProbe`（常に true）／`FileLockLivenessProbe`（任意 Mailbox）／`AgyLockLivenessProbe`（`[win32]`、Restart Manager 由来） | HTTP ping・pidfile 式・クラスタ対応生存判定が必要な時 |
 
@@ -365,13 +365,13 @@ alias は次の両方を満たさなければなりません:
 | `OutboxDeliveryAdapter`（`adapters/outbox.py`、BR1） | base | Yes | Yes | `ATTRIBUTED_METADATA` |
 | `AgyDeliveryAdapter`（`adapters/agy.py`） | `[win32]` | No | No | `USER_EXPLICIT` |
 
-`AgyDeliveryAdapter` の完全な scope contract は **[`adapters/SCOPE_AGY.md`](./adapters/SCOPE_AGY.md)** を参照してください。
+`AgyDeliveryAdapter` の完全な scope contract は **[`docs/adapters/SCOPE_AGY.md`](./docs/adapters/SCOPE_AGY.md)** を参照してください。
 
 **帰結（好みでなく演繹）:** `agy.exe` はカスタム JSON フィールドを surface せず、*かつ* language mirroring が帯域外ヒントを打ち消すため、`agy.exe` の出力言語は実質 100 % ローカル専権です——ローカルのナッジ定数のみで決まります。したがって `force-local` が*このアダプタに限り*唯一正しい既定であり、これは実装事実から導かれます。`Yes/Yes` を宣言するアダプタは送信者提供ロケールを advisory として surface することがあります。
 
 ### 新アダプタの実装
 
-**[`adapters/ADAPTER_AUTHORING.md`](./adapters/ADAPTER_AUTHORING.md)** のチェックリストを参照。義務事項:
+**[`docs/adapters/ADAPTER_AUTHORING.md`](./docs/adapters/ADAPTER_AUTHORING.md)** のチェックリストを参照。義務事項:
 
 1. 3 フィールドの capability を宣言する。
 2. `wake(target_id) -> bool` を **text 引数なし**で実装する（A1）。
@@ -458,7 +458,7 @@ CREATED → WOKEN → RETRY → … → DEAD_LETTER
 CREATED → … → REAPED                  # 孤児清掃
 ```
 
-シーケンスレベルの詳細は [`WORK_FLOW.md`](./WORK_FLOW.md) を参照。
+シーケンスレベルの詳細は [`docs/WORK_FLOW.md`](./docs/WORK_FLOW.md) を参照。
 
 ---
 
@@ -466,7 +466,7 @@ CREATED → … → REAPED                  # 孤児清掃
 
 agentknock の core は cross-platform（純 Python、Win32 非依存）です。各 delivery adapter が自分の scope contract を公開します:
 
-- **[`adapters/SCOPE_AGY.md`](./adapters/SCOPE_AGY.md)** — `AgyDeliveryAdapter` の scope（Windows 限定・実コンソール同一セッション同一インテグリティ・昇格/WSL/リモート/パイプ stdin 非対応）。
+- **[`docs/adapters/SCOPE_AGY.md`](./docs/adapters/SCOPE_AGY.md)** — `AgyDeliveryAdapter` の scope（Windows 限定・実コンソール同一セッション同一インテグリティ・昇格/WSL/リモート/パイプ stdin 非対応）。
 - `CallbackDeliveryAdapter` — cross-platform、インプロセスのみ（他プロセスには届かない）。
 - `OutboxDeliveryAdapter` — cross-platform、共有 FS 上で cross-process。scope は「両エージェントが mailbox ディレクトリを読み書きできる場所ならどこでも」。
 
@@ -523,7 +523,7 @@ v0.3 では i18n 起床ナッジカタログは**アダプタ内部**の関心�
 ---
 
 ## 関連資料
-- **[`adapters/ADAPTER_AUTHORING.md`](./adapters/ADAPTER_AUTHORING.md)** — 新アダプタ作者が満たすべきチェックリスト（R2 テスト、Scope doc、capability 宣言、マーカーライフサイクル選択）。
-- **[`adapters/SCOPE_AGY.md`](./adapters/SCOPE_AGY.md)** — リファレンス `AgyDeliveryAdapter` の scope contract。
-- [`WORK_FLOW.md`](./WORK_FLOW.md) — ディレクトリのライフサイクル、シーケンス図、関数別仕様、単体テスト仕様。
-- [`AGENTS.ja.md`](./AGENTS.ja.md) — **注入される側**のエージェントが従う規約。
+- **[`docs/adapters/ADAPTER_AUTHORING.md`](./docs/adapters/ADAPTER_AUTHORING.md)** — 新アダプタ作者が満たすべきチェックリスト（R2 テスト、Scope doc、capability 宣言、マーカーライフサイクル選択）。
+- **[`docs/adapters/SCOPE_AGY.md`](./docs/adapters/SCOPE_AGY.md)** — リファレンス `AgyDeliveryAdapter` の scope contract。
+- [`docs/WORK_FLOW.md`](./docs/WORK_FLOW.md) — ディレクトリのライフサイクル、シーケンス図、関数別仕様、単体テスト仕様。
+- [`docs/AGENTS.ja.md`](./docs/AGENTS.ja.md) — **注入される側**のエージェントが従う規約。

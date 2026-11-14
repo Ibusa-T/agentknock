@@ -34,7 +34,7 @@ assumes a *foreground window*. This tool assumes neither.
   **[The API](#the-api-oss-users)**.
 - **Adapter authors** — someone extending agentknock to a new target agent
   beyond `agy.exe`. Read **[The capability contract](#the-capability-contract-adapter-authors)**
-  and the **[Adapter Authoring Checklist](./adapters/ADAPTER_AUTHORING.md)**.
+  and the **[Adapter Authoring Checklist](./docs/adapters/ADAPTER_AUTHORING.md)**.
 
 Both readers share the Security invariants, Marker lifecycle, Operations
 guide, and Threat model sections below.
@@ -166,7 +166,7 @@ When used as an **Agent Skill** (e.g. via `SKILL.md` in Antigravity or Claude Co
 
 1. **Discovery & Dispatch**: The sender agent inspects peers with `agentknock.list_recipients()` and posts requests using `agentknock.send(recipient=..., content=..., sender=...)`.
 2. **Focus-Free Wake**: The background `WatchDaemon` detects the incoming marker in `undelivered/` and invokes `adapter.wake(target_id)` (e.g. injecting a benign wake nudge into `CONIN$` without stealing desktop focus).
-3. **Autonomous Ingestion (`AGENTS.md`)**: The woken agent acknowledges the wake doorbell, actively loads the instruction from the signed `<SYSTEM_MESSAGE>` payload, deletes the marker from `undelivered/`, and records the message ID in `read.json` (R-M1).
+3. **Autonomous Ingestion ([`docs/AGENTS.md`](./docs/AGENTS.md))**: The woken agent acknowledges the wake doorbell, actively loads the instruction from the signed `<SYSTEM_MESSAGE>` payload, deletes the marker from `undelivered/`, and records the message ID in `read.json` (R-M1).
 
 ---
 
@@ -230,7 +230,7 @@ you drop into any target without forking the core.
 | Extension point | What it does | Default implementation | Swap it when you ... |
 |:---|:---|:---|:---|
 | **`Notifier`** | Detects new markers appearing in the mailbox. | `WatchdogNotifier` when `watchdog` is importable; automatic fallback to `PollingNotifier` (default 500 ms, env `AGENTKNOCK_POLL_INTERVAL_SEC`) otherwise (B6). | ... need custom FS events, a Kafka-style trigger, or an HTTP webhook as the trigger. |
-| **`DeliveryAdapter`** | Wakes the target when a validated message arrives. **`wake(target_id: str) -> bool`** — no text argument (A1, type-level R2). | `CallbackDeliveryAdapter` for in-process consumers (Quickstart); `OutboxDeliveryAdapter` for file-bridge delivery (BR1: Gemini → Claude); `AgyDeliveryAdapter` (optional, `[win32]` extra) for `CONIN$` injection. | ... add a new target agent. See the [Adapter Authoring Checklist](./adapters/ADAPTER_AUTHORING.md). |
+| **`DeliveryAdapter`** | Wakes the target when a validated message arrives. **`wake(target_id: str) -> bool`** — no text argument (A1, type-level R2). | `CallbackDeliveryAdapter` for in-process consumers (Quickstart); `OutboxDeliveryAdapter` for file-bridge delivery (BR1: Gemini → Claude); `AgyDeliveryAdapter` (optional, `[win32]` extra) for `CONIN$` injection. | ... add a new target agent. See the [Adapter Authoring Checklist](./docs/adapters/ADAPTER_AUTHORING.md). |
 | **`AliasRegistry`** | opt-in self-advertisement directory, **independent of the Mailbox** (A3). Exposes `register` / `unregister` / `resolve` / `list_active`. | `FileSystemAliasRegistry` under `~/.agentknock/registry/<alias>.json`; `InMemoryAliasRegistry` for tests. | ... want to use a shared SQLite or network-backed registry across machines. |
 | **`LivenessProbe`** | Decides whether a target is alive (A2). `is_alive(target_id) -> bool`. | `AlwaysAliveProbe` (trivial pass-through); `FileLockLivenessProbe` (any Mailbox); `AgyLockLivenessProbe` (`[win32]`, Restart Manager-backed). | ... need HTTP ping, pidfile-based, or cluster-aware liveness. |
 
@@ -441,7 +441,7 @@ An alias must:
 | `AgyDeliveryAdapter` (`adapters/agy.py`) | `[win32]` | No | No | `USER_EXPLICIT` |
 
 For the full scope contract of `AgyDeliveryAdapter`, see
-**[`adapters/SCOPE_AGY.md`](./adapters/SCOPE_AGY.md)**.
+**[`docs/adapters/SCOPE_AGY.md`](./docs/adapters/SCOPE_AGY.md)**.
 
 **Consequence (a deduction, not a preference):** because `agy.exe` does not
 surface custom JSON fields *and* language mirroring defeats any out-of-band
@@ -453,7 +453,7 @@ sender-supplied locale advisorily.
 
 ### Authoring a new adapter
 
-See **[`adapters/ADAPTER_AUTHORING.md`](./adapters/ADAPTER_AUTHORING.md)** for
+See **[`docs/adapters/ADAPTER_AUTHORING.md`](./docs/adapters/ADAPTER_AUTHORING.md)** for
 the checklist. The obligations:
 
 1. Declare the three capability fields.
@@ -582,7 +582,7 @@ CREATED → WOKEN → RETRY → … → DEAD_LETTER
 CREATED → … → REAPED                  # orphan cleanup
 ```
 
-For sequence-level detail see [`WORK_FLOW.md`](./WORK_FLOW.md).
+For sequence-level detail see [`docs/WORK_FLOW.md`](./docs/WORK_FLOW.md).
 
 ---
 
@@ -591,7 +591,7 @@ For sequence-level detail see [`WORK_FLOW.md`](./WORK_FLOW.md).
 The agentknock core is cross-platform (pure Python, no Win32). Each delivery
 adapter publishes its own scope contract:
 
-- **[`adapters/SCOPE_AGY.md`](./adapters/SCOPE_AGY.md)** — scope of
+- **[`docs/adapters/SCOPE_AGY.md`](./docs/adapters/SCOPE_AGY.md)** — scope of
   `AgyDeliveryAdapter` (Windows-only, real-console same-session same-integrity;
   not elevated/WSL/remote/piped-stdin).
 - `CallbackDeliveryAdapter` — cross-platform, in-process only (does not reach
@@ -686,7 +686,7 @@ to `dead_letter/<id>.json` rather than retried indefinitely.
 ---
 
 ## See also
-- **[`adapters/ADAPTER_AUTHORING.md`](./adapters/ADAPTER_AUTHORING.md)** — the checklist a new adapter author must satisfy (R2 test, Scope doc, capability declaration, marker lifecycle choice).
-- **[`adapters/SCOPE_AGY.md`](./adapters/SCOPE_AGY.md)** — scope contract of the reference `AgyDeliveryAdapter`.
-- [`WORK_FLOW.md`](./WORK_FLOW.md) — directory lifecycle, sequence diagrams, per-function spec, unit-test spec.
-- [`AGENTS.md`](./AGENTS.md) — the convention the **injected** agent must follow.
+- **[`docs/adapters/ADAPTER_AUTHORING.md`](./docs/adapters/ADAPTER_AUTHORING.md)** — the checklist a new adapter author must satisfy (R2 test, Scope doc, capability declaration, marker lifecycle choice).
+- **[`docs/adapters/SCOPE_AGY.md`](./docs/adapters/SCOPE_AGY.md)** — scope contract of the reference `AgyDeliveryAdapter`.
+- [`docs/WORK_FLOW.md`](./docs/WORK_FLOW.md) — directory lifecycle, sequence diagrams, per-function spec, unit-test spec.
+- [`docs/AGENTS.md`](./docs/AGENTS.md) — the convention the **injected** agent must follow.

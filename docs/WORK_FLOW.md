@@ -1,9 +1,9 @@
 # agentknock v0.2 ワークフロー & 単体テスト仕様書 (`WORK_FLOW.md`)
 
-- **対象パッケージ**: [`agentknock`](./agentknock/) (公開 L3) + [`console_injector.py`](./console_injector.py) (L2/L3 実装) + [`_watcher.py`](./_watcher.py) (受信側常駐 D2) + [`_registry.py`](./_registry.py) (純 L2 D3) + [`agentknock/_adapter.py`](./agentknock/_adapter.py) (非公開 L1) + [`_win_console.pyx`](./_win_console.pyx) (nogil L0)
+- **対象パッケージ**: [`agentknock`](../agentknock/) (公開 L3) + [`console_injector.py`](../console_injector.py) (L2/L3 実装) + [`_watcher.py`](../_watcher.py) (受信側常駐 D2) + [`_registry.py`](../_registry.py) (純 L2 D3) + [`agentknock/_adapter.py`](../agentknock/_adapter.py) (非公開 L1) + [`_win_console.pyx`](../_win_console.pyx) (nogil L0)
 - **連携フレームワーク**: `orochi`（ファイル監視エンジン）— `_watcher.ResidentWatcher.enqueue` に接続する
 - **対象環境**: Windows 10/11 + Python ≥ 3.10 (`uv run python`)
-- **D0 契約**: [`_contract.py`](./_contract.py) が型と不変条件を凍結保持する
+- **D0 契約**: [`_contract.py`](../_contract.py) が型と不変条件を凍結保持する
 - **関連 ADR**: `Antigravity/tools/orochi/DESIGN-0001-agentknock-positioning.md`
 
 ---
@@ -237,8 +237,8 @@ D0 の正本契約。D1-D5 はこれを import してのみ型・名前を参照
   - 窓2（テストターゲット側）: `22222222-2222-2222-2222-222222222222`
 
 テストモジュール:
-- [`tests/test_d4_r2_r1_invariants.py`](./tests/test_d4_r2_r1_invariants.py) — R2 構造/動的/名前空間 + R1 台帳絞り込み + L1 seam 粒度
-- [`tests/test_t3_security.py`](./tests/test_t3_security.py) — T3 セキュリティ (R2 境界維持 + sender/title 硬化)
+- [`tests/test_d4_r2_r1_invariants.py`](../tests/test_d4_r2_r1_invariants.py) — R2 構造/動的/名前空間 + R1 台帳絞り込み + L1 seam 粒度
+- [`tests/test_t3_security.py`](../tests/test_t3_security.py) — T3 セキュリティ (R2 境界維持 + sender/title 硬化)
 
 ### 3.2 【カテゴリ 1】公開 API 面の構造的 R2 保証 (`tests/test_d4_r2_r1_invariants.py`)
 

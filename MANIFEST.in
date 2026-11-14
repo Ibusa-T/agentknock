@@ -6,6 +6,7 @@ include setup.py
 # License and docs
 include LICENSE
 include *.md
+recursive-include docs *.md
 
 # Tests
 recursive-include tests *.py
