@@ -269,6 +269,14 @@ class ResidentWatcher:
                     return True
 
                 # Wake failed; prepare for retry
+                wake_detail = getattr(self.adapter, "last_wake_detail", None)
+                wake_extra: Optional[Dict[str, Any]] = None
+                if isinstance(wake_detail, dict) and wake_detail.get("reason"):
+                    wake_extra = {
+                        "wake_reason": str(wake_detail["reason"]),
+                        "win32_error": int(wake_detail.get("win32_error", 0)),
+                    }
+
                 if attempt < self.max_attempts:
                     backoff = self._compute_backoff(attempt)
                     self._append_audit(
@@ -278,11 +286,18 @@ class ResidentWatcher:
                         recipient=recipient_id,
                         attempts=attempt,
                         reason=f"wake_failed_backoff_{backoff:.2f}s",
+                        extra=wake_extra,
                     )
                     if backoff > 0.0:
                         self._sleep(backoff)
 
             # Max attempts exhausted -> quarantine to dead letter
+            last_detail = getattr(self.adapter, "last_wake_detail", None)
+            dl_extra: Dict[str, Any] = {}
+            if isinstance(last_detail, dict) and last_detail.get("reason"):
+                dl_extra["wake_reason"] = str(last_detail["reason"])
+                dl_extra["win32_error"] = int(last_detail.get("win32_error", 0))
+
             dl_path, tier = self.mailbox.dead_letter_store.quarantine(
                 marker,
                 message_id=message_id,
@@ -291,6 +306,7 @@ class ResidentWatcher:
                 attempts=self.max_attempts,
                 reason="max_attempts_exhausted",
             )
+            dl_extra["dead_letter_path"] = str(dl_path)
             self._append_audit(
                 event="DEAD_LETTER",
                 message_id=message_id,
@@ -299,7 +315,7 @@ class ResidentWatcher:
                 attempts=self.max_attempts,
                 reason="max_attempts_exhausted",
                 tier=tier,
-                extra={"dead_letter_path": str(dl_path)},
+                extra=dl_extra,
             )
             return False
 

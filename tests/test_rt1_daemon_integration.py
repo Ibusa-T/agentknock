@@ -112,14 +112,22 @@ def test_daemon_watch_agy_adapter_r_m1_retention(tmp_path: Path, monkeypatch):
     target_uuid = str(uuid.uuid4())
     client.register_self("agy-worker", target_uuid, role="AgyWorker")
 
-    # Mock AgyDeliveryAdapter injection
+    # Mock AgyDeliveryAdapter injection (v0.3.1 verified seam: (pid, start_time))
     injected_targets: List[str] = []
     agy_adapter = AgyDeliveryAdapter()
-    monkeypatch.setattr(agy_adapter, "_find_pid", lambda cid: 9999)
+    monkeypatch.setattr(
+        agy_adapter,
+        "_find_process_identity",
+        lambda cid: (9999, 134391280290210460),
+    )
     monkeypatch.setattr(
         agy_adapter,
         "_inject",
-        lambda pid, text: injected_targets.append(target_uuid) or True,
+        lambda pid, text, *, expected_start_time=None, **kw: (
+            injected_targets.append(f"{target_uuid}:{expected_start_time}") or True
+        )
+        if expected_start_time == 134391280290210460
+        else False,
     )
 
     daemon = WatchDaemon(

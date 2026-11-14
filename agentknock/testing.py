@@ -14,15 +14,22 @@ DEFAULT_FORBIDDEN_SYMBOLS: frozenset[str] = frozenset(
     {
         "_adapter",
         "_win_console",
+        "_win_console_ctypes",
         "CONIN$",
         "AttachConsole",
         "WriteConsoleInputW",
+        "OpenProcess",
+        "GetProcessTimes",
         "wake",
         "_inject",
         "_find_pid",
+        "_find_process_identity",
         "find_agy_pid_by_conversation_id",
+        "_find_agy_process_by_conversation_id",
         "inject_console_input",
+        "inject_console_input_verified",
         "find_pid_by_lock_path",
+        "find_process_by_lock_path",
         "_default_adapter",
     }
 )

@@ -50,9 +50,11 @@ def test_r2_send_callgraph_no_win_console_conin():
     assert send_func is not None, "send() 関数が console_injector.py に見つからない"
 
     forbidden_symbols = {
-        "_adapter", "_win_console", "CONIN$", "AttachConsole",
-        "find_agy_pid_by_conversation_id", "inject_console_input",
-        "find_pid_by_lock_path", "_default_adapter"
+        "_adapter", "_win_console", "_win_console_ctypes", "CONIN$", "AttachConsole",
+        "find_agy_pid_by_conversation_id", "_find_agy_process_by_conversation_id",
+        "inject_console_input", "inject_console_input_verified",
+        "find_pid_by_lock_path", "find_process_by_lock_path",
+        "_find_process_identity", "_default_adapter"
     }
 
     reached_forbidden = set()
@@ -120,9 +122,10 @@ def test_r2_send_with_win_console_unavailable(monkeypatch):
     """
     import agentknock
 
-    # _win_console が sys.modules にあれば削除
-    if "_win_console" in sys.modules:
-        del sys.modules["_win_console"]
+    # _win_console / _win_console_ctypes が sys.modules にあれば削除
+    for mod_name in ("_win_console", "agentknock.adapters._win_console_ctypes"):
+        if mod_name in sys.modules:
+            del sys.modules[mod_name]
 
     # send() が import 可能 = _win_console 非依存
     try:
@@ -203,28 +206,35 @@ def test_adapter_wake_find_pid_inject_granularity(monkeypatch):
 
     adapter = _AgyAdapter()
 
-    # 粒度確認: _find_pid / _inject が個別メソッドとして存在するか
+    # 粒度確認: _find_pid / _find_process_identity / _inject が個別メソッドとして存在するか
     assert hasattr(adapter, "_find_pid"), "_find_pid メソッドが存在しない"
+    assert hasattr(adapter, "_find_process_identity"), "_find_process_identity メソッドが存在しない"
     assert hasattr(adapter, "_inject"), "_inject メソッドが存在しない"
 
-    # 個別 monkeypatch が可能か確認
-    find_pid_calls = []
+    # 個別 monkeypatch が可能か確認 (v0.3.1 Option A: (pid, start_time) 検証付き seam)
+    find_identity_calls = []
     inject_calls = []
 
-    def mock_find_pid(cid):
-        find_pid_calls.append(cid)
-        return 12345
+    def mock_find_identity(cid):
+        find_identity_calls.append(cid)
+        return (12345, 134391280290210460)
 
-    def mock_inject(pid, text):
-        inject_calls.append((pid, text))
+    def mock_inject(pid, text, *, expected_start_time=None, **kwargs):
+        inject_calls.append((pid, text, expected_start_time))
         return True
 
-    monkeypatch.setattr(adapter, "_find_pid", mock_find_pid)
+    monkeypatch.setattr(adapter, "_find_process_identity", mock_find_identity)
     monkeypatch.setattr(adapter, "_inject", mock_inject)
 
-    # monkeypatch が適用可能（seam が存在）であることを確認
+    # monkeypatch が適用可能（seam が存在）かつ wake() が expected_start_time を引き渡すことを確認
     assert callable(adapter._find_pid)
+    assert callable(adapter._find_process_identity)
     assert callable(adapter._inject)
+    assert adapter.wake("11111111-2222-3333-4444-555555555555", wake_locale="en") is True
+    assert len(find_identity_calls) == 1
+    assert len(inject_calls) == 1
+    assert inject_calls[0][0] == 12345
+    assert inject_calls[0][2] == 134391280290210460
 
 
 def test_adapter_wake_level_monkeypatch(monkeypatch):

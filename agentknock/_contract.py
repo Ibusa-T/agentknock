@@ -47,7 +47,9 @@ class Recipient(TypedDict):
     role: str
     capabilities: Capabilities
 
-
+"""
+メッセージの送信元を見る
+"""
 class MessagePayload(TypedDict):
     """Frozen Message JSON schema."""
     id: str
@@ -58,7 +60,12 @@ class MessagePayload(TypedDict):
     renderDetails: dict[str, str]            # {"messageTitle": "[sender-supplied] <title>"}
     content: str
 
-
+"""
+エージェント自身の情報
+セッション・エイリアス
+信頼性の証明
+通信の有効期限
+"""
 class RegistryEntry(TypedDict):
     """registry/<alias>.json — opt-in self-advertisement record."""
     alias: str
@@ -69,12 +76,20 @@ class RegistryEntry(TypedDict):
 
 
 # ---- 拡張点1: DeliveryAdapter (A1・B3 反映) ----------------------------------
+"""
+各プラットフォームの共通インターフェース
+現状はAntigravity対応のみ
+"""
 @runtime_checkable
 class DeliveryAdapter(Protocol):
     """
     【A1 型レベル R2 保証】:
     wake() は target_id のみを受け取り、自由文字列 text 引数を一切持たない。
     起床ナッジ定数カタログの保持・解決は各アダプタ内部の専権責務とする (B3)。
+    """
+    
+    """
+    通信を試みてきた相手の信頼性の担保を取るためのプロパティ
     """
     @property
     def capabilities(self) -> Capabilities: ...
@@ -157,16 +172,36 @@ class DeadLetterStore(Protocol):
 
 
 # ---- 後方互換性プロトコル (v0.2 互換用) ----------------------------------------
+
+"""
+通信相手にWatcherのフラグとなるファイルを置くためのインターフェース
+リストから通信相手を探す
+通信相手へファイルを置きに行く
+"""
 @runtime_checkable
 class PublicApi(Protocol):
-    def send(self, recipient: str, content: str, *, sender: str) -> str: ...
     def list_recipients(self) -> list[Recipient]: ...
+    def send(self, recipient: str, content: str, *, sender: str) -> str: ...
+    
 
-
+"""
+injectでファイルが置かれたことを通知する
+どこのプロセスから来たか特定する find_pid
+二つを集約しているwake
+"""
 @runtime_checkable
 class _AgyAdapter(Protocol):
+    def _inject(
+        self,
+        pid: int,
+        text: str,
+        *,
+        expected_start_time: Optional[int] = None,
+    ) -> bool: ...
+    def _find_process_identity(
+        self, conversation_id: str
+    ) -> Optional[tuple[int, int]]: ...
     def _find_pid(self, conversation_id: str) -> Optional[int]: ...
-    def _inject(self, pid: int, text: str) -> bool: ...
     def wake(
         self,
         conversation_id: str,
@@ -175,7 +210,9 @@ class _AgyAdapter(Protocol):
         output_locale: Optional[str] = None,
     ) -> bool: ...
 
-
+"""
+injectが通知していないファイル(マーカー)の有無を監視する
+"""
 @runtime_checkable
 class _Watcher(Protocol):
     def on_undelivered(self, undelivered_path: str) -> bool: ...

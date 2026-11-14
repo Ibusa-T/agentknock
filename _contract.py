@@ -105,12 +105,24 @@ class _AgyAdapter(Protocol):
     the L2 pure function `_resolve_alias_from_registry` so that send()'s call
     graph stays disconnected from this Win32-touching module (R2)."""
 
-    def _find_pid(self, conversation_id: str) -> Optional[int]:
-        """presence/<id>.lock -> PID (L0). Monkeypatch seam for unit tests."""
+    def _find_process_identity(
+        self, conversation_id: str
+    ) -> Optional[tuple[int, int]]:
+        """presence/<id>.lock -> (pid, start_time_u64) (L0). Monkeypatch seam for unit tests."""
         ...
 
-    def _inject(self, pid: int, text: str) -> bool:
-        """nogil CONIN$ injection (L0). Monkeypatch seam for unit tests."""
+    def _find_pid(self, conversation_id: str) -> Optional[int]:
+        """presence/<id>.lock -> PID (L0). Compatibility wrapper."""
+        ...
+
+    def _inject(
+        self,
+        pid: int,
+        text: str,
+        *,
+        expected_start_time: Optional[int] = None,
+    ) -> bool:
+        """HANDLE-pinned CONIN$ injection (L0). Monkeypatch seam for unit tests."""
         ...
 
     def wake(

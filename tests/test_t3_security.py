@@ -30,10 +30,22 @@ def _write_message(tmp_path, *, sender="claude-agent", title="hello", content="b
 def test_r2_wake_prompt_never_derives_from_msg_data(tmp_path, monkeypatch):
     monkeypatch.delenv("CONINJECT_LOCALE", raising=False)
     captured = {}
-    monkeypatch.setattr(adp._default_adapter, "_find_pid", lambda cid: 4242)
+    monkeypatch.setattr(
+        adp._default_adapter,
+        "_find_process_identity",
+        lambda cid: (4242, 134391280290210460),
+    )
 
-    def fake_inject(pid, text, send_enter=True, submit_delay_sec=0.08):
+    def fake_inject(
+        pid,
+        text,
+        *,
+        expected_start_time=None,
+        send_enter=True,
+        submit_delay_sec=0.08,
+    ):
         captured["text"] = text
+        captured["expected_start_time"] = expected_start_time
         return True
 
     monkeypatch.setattr(adp._default_adapter, "_inject", fake_inject)
@@ -48,6 +60,7 @@ def test_r2_wake_prompt_never_derives_from_msg_data(tmp_path, monkeypatch):
 
     assert ok is True
     assert captured["text"] == ci.WAKE_NUDGE_CATALOG["en"]
+    assert captured["expected_start_time"] == 134391280290210460
     for s in ("__PWN_TITLE__", "__PWN_CONTENT__", "__PWN_LOCALE__", "__PWN_WAKE__", "__PWN_TEXT__"):
         assert s not in captured["text"]
 
@@ -55,10 +68,14 @@ def test_r2_wake_prompt_never_derives_from_msg_data(tmp_path, monkeypatch):
 def test_r2_sender_claimed_locale_is_ignored(tmp_path, monkeypatch):
     monkeypatch.delenv("CONINJECT_LOCALE", raising=False)
     captured = {}
-    monkeypatch.setattr(adp._default_adapter, "_find_pid", lambda cid: 4242)
+    monkeypatch.setattr(
+        adp._default_adapter,
+        "_find_process_identity",
+        lambda cid: (4242, 134391280290210460),
+    )
     monkeypatch.setattr(
         adp._default_adapter, "_inject",
-        lambda pid, text, send_enter=True, submit_delay_sec=0.08: captured.__setitem__("text", text) or True,
+        lambda pid, text, *, expected_start_time=None, send_enter=True, submit_delay_sec=0.08: captured.__setitem__("text", text) or True,
     )
     _, _, marker = _write_message(tmp_path, extra={"locale": "ja"})
     ci.on_undelivered_file_created(marker, wake_locale="en")
@@ -68,9 +85,13 @@ def test_r2_sender_claimed_locale_is_ignored(tmp_path, monkeypatch):
 
 def test_no_op_when_marker_already_consumed(tmp_path, monkeypatch):
     fired = {"n": 0}
-    monkeypatch.setattr(adp._default_adapter, "_find_pid", lambda cid: 4242)
+    monkeypatch.setattr(
+        adp._default_adapter,
+        "_find_process_identity",
+        lambda cid: (4242, 134391280290210460),
+    )
     monkeypatch.setattr(adp._default_adapter, "_inject",
-                        lambda pid, text, send_enter=True, submit_delay_sec=0.08: fired.__setitem__("n", fired["n"] + 1) or True)
+                        lambda pid, text, *, expected_start_time=None, send_enter=True, submit_delay_sec=0.08: fired.__setitem__("n", fired["n"] + 1) or True)
     _, _, marker = _write_message(tmp_path)
     marker.unlink()
     ok = ci.on_undelivered_file_created(marker, wake_locale="en")
