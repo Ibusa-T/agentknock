@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibusa-T
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 agentknock.adapters._win_console_ctypes — Pure-Python ctypes Win32 L0 Backend.
 

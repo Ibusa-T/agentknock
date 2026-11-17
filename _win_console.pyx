@@ -2,6 +2,8 @@
 # cython: boundscheck=False
 # cython: wraparound=False
 # distutils: libraries = kernel32 user32 rstrtmgr
+# Copyright (c) 2026 Ibusa-T
+# SPDX-License-Identifier: AGPL-3.0-or-later
 
 """
 Antigravity 別窓エージェント バックグラウンド入力注入 Cython ネイティブ拡張 (_win_console.pyx)

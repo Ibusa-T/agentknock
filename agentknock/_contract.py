@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibusa-T
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 agentknock _contract — Frozen Protocols & Types (v0.3.0 / BR1-SPEC).
 

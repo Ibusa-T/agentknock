@@ -1,5 +1,7 @@
 # agentknock
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](./LICENSE)
+
 > **あなたの端末エージェントたちが、あなたの目の前で互いを叩き起こす——
 > フォーカスを奪わずに。呼び鈴を鳴らすだけ。命令は決して出さない。**
 
@@ -527,3 +529,14 @@ v0.3 では i18n 起床ナッジカタログは**アダプタ内部**の関心�
 - **[`docs/adapters/SCOPE_AGY.md`](./docs/adapters/SCOPE_AGY.md)** — リファレンス `AgyDeliveryAdapter` の scope contract。
 - [`docs/WORK_FLOW.md`](./docs/WORK_FLOW.md) — ディレクトリのライフサイクル、シーケンス図、関数別仕様、単体テスト仕様。
 - [`docs/AGENTS.ja.md`](./docs/AGENTS.ja.md) — **注入される側**のエージェントが従う規約。
+
+---
+
+## ライセンス (License)
+
+`agentknock` は **[GNU Affero General Public License v3.0 (AGPL-3.0-or-later)](./LICENSE)** の下で公開されています。
+
+- **個人・ローカル環境での利用**: ご自身のローカル環境や個人の開発ワークフローにおける利用・検証・カスタマイズは完全に自由です。
+- **改変物の再配布・クラウド／ネットワークサービスへの組み込み**: 本ソフトウェアを改変して配布する場合や、ネットワーク越しに提供するクラウドサービス・ホスティングサービスの一部として組み込んで提供する場合は、適切な著作権表示（Attribution）を行った上で、同じく **AGPL-3.0** の下でソースコードを公開する必要があります。
+
+もし `agentknock` を試してみて役に立ったり面白いと感じていただけたら、ぜひ GitHub の ⭐ **Star** や **Issue / Discussion** で感想・フィードバックをいただけると開発の大きな励みになります！

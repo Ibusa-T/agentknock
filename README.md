@@ -1,5 +1,7 @@
 # agentknock
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](./LICENSE)
+
 > **Your terminal agents, knocking each other awake while you watch —
 > without stealing focus. It rings the doorbell; it never gives the orders.**
 
@@ -690,3 +692,14 @@ to `dead_letter/<id>.json` rather than retried indefinitely.
 - **[`docs/adapters/SCOPE_AGY.md`](./docs/adapters/SCOPE_AGY.md)** — scope contract of the reference `AgyDeliveryAdapter`.
 - [`docs/WORK_FLOW.md`](./docs/WORK_FLOW.md) — directory lifecycle, sequence diagrams, per-function spec, unit-test spec.
 - [`docs/AGENTS.md`](./docs/AGENTS.md) — the convention the **injected** agent must follow.
+
+---
+
+## License
+
+`agentknock` is released under the **[GNU Affero General Public License v3.0 (AGPL-3.0-or-later)](./LICENSE)**.
+
+- **Personal & Local Use**: You are completely free to run, study, and customize `agentknock` on your own local machines and personal workflows.
+- **Modifications & Network/Cloud Derivatives**: Any redistributed modifications, or any derivative work offered as a hosted/cloud or network-accessible service, must also be made available as open-source software under the same **AGPL-3.0** license with proper copyright attribution.
+
+If you try `agentknock` in your multi-agent workflow, we would love to hear how it works for you — leaving a ⭐ **Star** on GitHub or opening an **Issue / Discussion** with your feedback, ideas, or use cases is always warmly appreciated!

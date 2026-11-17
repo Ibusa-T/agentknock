@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibusa-T
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 agentknock.testing — R2 Verification Testing Utilities (B1 仕様).
 

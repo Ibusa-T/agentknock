@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibusa-T
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Antigravity 別窓エージェント バックグラウンド入力注入モジュール (console_injector.py)
 

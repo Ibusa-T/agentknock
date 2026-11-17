@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibusa-T
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 agentknock.core — Zero-dependency core library (Mailbox, Registry, Probe, Notifier, Watcher).
 """

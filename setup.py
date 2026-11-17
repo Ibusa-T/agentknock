@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibusa-T
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 _win_console.pyx ビルド用スクリプト (setup.py)
 
@@ -82,6 +84,7 @@ if __name__ == "__main__":
         setup(
             name="antigravity-win-console",
             version="0.1.0",
+            license="AGPL-3.0-or-later",
             description="Cython native Win32 console input injector and Restart Manager PID resolver",
             ext_modules=cythonize(
                 extensions,

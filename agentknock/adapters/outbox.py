@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibusa-T
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 agentknock.adapters.outbox — Outbox Delivery Adapter & Claude Liveness Probe (BR1 仕様).
 
