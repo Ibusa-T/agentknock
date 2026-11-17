@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentknock"
-version = "0.3.2"
+version = "0.3.3"
 description = "Attach to an already-running, unmodifiable Windows console AI agent and knock it awake — focus-free, by PID, via CONIN$. The attach-to-existing half of desktop multi-agent orchestration."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "AGPL-3.0-or-later" }
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
 authors = [{ name = "Ibusa-T" }]
 keywords = [
     "agent",
@@ -26,7 +27,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3",
     "Programming Language :: Cython",
