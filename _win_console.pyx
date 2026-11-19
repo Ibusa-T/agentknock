@@ -35,9 +35,11 @@ cdef extern from "Python.h":
 cdef extern from *:
     """
     #define CONIN_DEVICE_NAME L"CONIN$"
+    #define CONOUT_DEVICE_NAME L"CONOUT$"
     #define WCHAR_CR L'\\r'
     """
     cdef const wchar_t* CONIN_DEVICE_NAME
+    cdef const wchar_t* CONOUT_DEVICE_NAME
     cdef wchar_t WCHAR_CR
 
 
@@ -48,6 +50,7 @@ cdef extern from *:
 cdef extern from "<windows.h>" nogil:
     ctypedef unsigned long DWORD
     ctypedef unsigned short WORD
+    ctypedef short SHORT
     ctypedef unsigned int UINT
     ctypedef unsigned long ULONG
     ctypedef int BOOL
@@ -98,6 +101,23 @@ cdef extern from "<windows.h>" nogil:
         WORD EventType
         _EVENT_UNION Event
 
+    ctypedef struct COORD:
+        SHORT X
+        SHORT Y
+
+    ctypedef struct SMALL_RECT:
+        SHORT Left
+        SHORT Top
+        SHORT Right
+        SHORT Bottom
+
+    ctypedef struct CONSOLE_SCREEN_BUFFER_INFO:
+        COORD dwSize
+        COORD dwCursorPosition
+        WORD wAttributes
+        SMALL_RECT srWindow
+        COORD dwMaximumWindowSize
+
     HANDLE OpenProcess(DWORD dwDesiredAccess, BOOL bInheritHandle, DWORD dwProcessId)
     DWORD WaitForSingleObject(HANDLE hHandle, DWORD dwMilliseconds)
     BOOL GetProcessTimes(
@@ -133,6 +153,27 @@ cdef extern from "<windows.h>" nogil:
         const INPUT_RECORD* lpBuffer,
         DWORD nLength,
         DWORD* lpNumberOfEventsWritten,
+    )
+    BOOL GetNumberOfConsoleInputEvents(
+        HANDLE hConsoleInput,
+        DWORD* lpcNumberOfEvents,
+    )
+    BOOL PeekConsoleInputW(
+        HANDLE hConsoleInput,
+        INPUT_RECORD* lpBuffer,
+        DWORD nLength,
+        DWORD* lpNumberOfEventsRead,
+    )
+    BOOL GetConsoleScreenBufferInfo(
+        HANDLE hConsoleOutput,
+        CONSOLE_SCREEN_BUFFER_INFO* lpConsoleScreenBufferInfo,
+    )
+    BOOL ReadConsoleOutputCharacterW(
+        HANDLE hConsoleOutput,
+        LPWSTR lpCharacter,
+        DWORD nLength,
+        COORD dwReadCoord,
+        DWORD* lpNumberOfCharsRead,
     )
     BOOL CloseHandle(HANDLE hObject)
     void Sleep(DWORD dwMilliseconds)
@@ -366,6 +407,174 @@ cdef inline void _init_key_record(
     rec.Event.KeyEvent.dwControlKeyState = 0
 
 
+cdef inline bint _has_visible_w(const WCHAR* buf, DWORD length) noexcept nogil:
+    cdef DWORD i = 0
+    cdef unsigned int u = 0
+    if buf == NULL or length == 0:
+        return 0
+    if <unsigned int>buf[0] == 0x3E:
+        i = 1
+        while i < length and <unsigned int>buf[i] == 0x20:
+            i += 1
+    while i < length:
+        u = <unsigned int>buf[i]
+        if u > 0x20 and u != 0x7F:
+            return 1
+        i += 1
+    return 0
+
+
+cdef int _has_pending_console_key_input_c(HANDLE h_conin, DWORD* out_err) noexcept nogil:
+    """Returns 1 if pending key-down found, 0 if none, -1 on Win32 error."""
+    cdef DWORD num_events = 0
+    cdef DWORD count = 0
+    cdef DWORD read_count = 0
+    cdef DWORD actual = 0
+    cdef DWORD i = 0
+    cdef INPUT_RECORD peek_buf[64]
+
+    if not GetNumberOfConsoleInputEvents(h_conin, &num_events):
+        out_err[0] = GetLastError()
+        return -1
+    if num_events == 0:
+        count = 1
+    elif num_events <= 64:
+        count = num_events
+    else:
+        count = 64
+    if not PeekConsoleInputW(h_conin, peek_buf, count, &read_count):
+        out_err[0] = GetLastError()
+        return -1
+    actual = read_count if read_count <= count else count
+    for i in range(actual):
+        if peek_buf[i].EventType == KEY_EVENT and peek_buf[i].Event.KeyEvent.bKeyDown:
+            return 1
+    return 0
+
+
+cdef int _has_active_cursor_or_input_line_c(HANDLE h_conout, DWORD* out_err) noexcept nogil:
+    """
+    Check 2 (2-B standalone): Sample console buffer (150ms) and return 1 if
+    X > 0 and cols 0..X-1 contain any visible char (> 0x20 and != 0x7F, including wide/non-ASCII).
+    Returns 1 if active typing detected, 0 if idle, -1 on Win32 error.
+    """
+    cdef CONSOLE_SCREEN_BUFFER_INFO csbi_1
+    cdef CONSOLE_SCREEN_BUFFER_INFO csbi_2
+    cdef DWORD read_len = 0
+    cdef DWORD chars_read = 0
+    cdef DWORD actual_len = 0
+    cdef COORD read_coord
+    cdef WCHAR* char_buf = NULL
+    cdef bint active = 0
+
+    if h_conout == NULL or h_conout == INVALID_HANDLE_VALUE:
+        out_err[0] = 0
+        return -1
+    memset(&csbi_1, 0, sizeof(CONSOLE_SCREEN_BUFFER_INFO))
+    if not GetConsoleScreenBufferInfo(h_conout, &csbi_1):
+        out_err[0] = GetLastError()
+        return -1
+
+    Sleep(150)
+
+    memset(&csbi_2, 0, sizeof(CONSOLE_SCREEN_BUFFER_INFO))
+    if not GetConsoleScreenBufferInfo(h_conout, &csbi_2):
+        out_err[0] = GetLastError()
+        return -1
+
+    if csbi_2.dwCursorPosition.X <= 0 or csbi_2.dwCursorPosition.Y < 0:
+        return 0
+
+    read_len = <DWORD>csbi_2.dwCursorPosition.X
+    if read_len > 4096:
+        read_len = 4096
+
+    char_buf = <WCHAR*>malloc(sizeof(WCHAR) * (read_len + 1))
+    if char_buf == NULL:
+        out_err[0] = 0
+        return -1
+    read_coord.X = 0
+    read_coord.Y = csbi_2.dwCursorPosition.Y
+    if not ReadConsoleOutputCharacterW(h_conout, char_buf, read_len, read_coord, &chars_read):
+        out_err[0] = GetLastError()
+        free(char_buf)
+        return -1
+    actual_len = chars_read if chars_read <= read_len else read_len
+    if actual_len > 0:
+        active = _has_visible_w(char_buf, actual_len)
+    free(char_buf)
+    return 1 if active else 0
+
+
+cdef int _check_user_typing_with_retries_c(
+    HANDLE h_proc,
+    HANDLE h_conin,
+    DWORD* out_err,
+) noexcept nogil:
+    """
+    Returns nogil_status:
+    - 0: clear to inject
+    - 3: process_already_exited
+    - 5: deferred_user_typing
+    - 6: user_typing_check_failed (with out_err populated)
+    """
+    cdef int attempt = 0
+    cdef int ev_res = 0
+    cdef int scr_res = 0
+    cdef bint typing_now = 0
+    cdef HANDLE h_conout = INVALID_HANDLE_VALUE
+    cdef bint conout_tried = 0
+
+    out_err[0] = 0
+    for attempt in range(3):
+        if attempt > 0:
+            if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
+                if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+                    CloseHandle(h_conout)
+                return 3
+
+        typing_now = 0
+        ev_res = _has_pending_console_key_input_c(h_conin, out_err)
+        if ev_res < 0:
+            if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+                CloseHandle(h_conout)
+            return 6
+        if ev_res > 0:
+            typing_now = 1
+        if not conout_tried:
+            conout_tried = 1
+            h_conout = CreateFileW(
+                CONOUT_DEVICE_NAME,
+                GENERIC_READ,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                NULL,
+                OPEN_EXISTING,
+                0,
+                NULL,
+            )
+            if h_conout == INVALID_HANDLE_VALUE or h_conout == NULL:
+                out_err[0] = GetLastError()
+                return 6
+        scr_res = _has_active_cursor_or_input_line_c(h_conout, out_err)
+        if scr_res < 0:
+            CloseHandle(h_conout)
+            return 6
+        if scr_res > 0:
+            typing_now = 1
+
+        if not typing_now:
+            if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+                CloseHandle(h_conout)
+            return 0
+
+        if attempt < 2:
+            Sleep(400)
+
+    if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+        CloseHandle(h_conout)
+    return 5
+
+
 cpdef tuple inject_console_input_verified(
     object target_pid,
     object expected_start_time,
@@ -373,6 +582,7 @@ cpdef tuple inject_console_input_verified(
     bint send_enter = True,
     double submit_delay_sec = 0.08,
     object allowed_images = None,
+    bint respect_user_typing = True,
 ):
     """
     HANDLE ピン留め＋ProcessStartTime 厳密照合付き CONIN$ 注入。
@@ -468,7 +678,10 @@ cpdef tuple inject_console_input_verified(
                     elif WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
                         nogil_status = 3  # process_already_exited
                     else:
-                        if text_w != NULL and text_len > 0:
+                        if respect_user_typing:
+                            nogil_status = _check_user_typing_with_retries_c(h_proc, h_conin, &err_code)
+
+                        if nogil_status == 0 and text_w != NULL and text_len > 0:
                             total_events = <DWORD>(text_len * 2)
                             records = <INPUT_RECORD*>malloc(sizeof(INPUT_RECORD) * total_events)
                             if records == NULL:
@@ -512,6 +725,10 @@ cpdef tuple inject_console_input_verified(
                 return (False, "process_already_exited", 0)
             elif nogil_status == 4:
                 return (False, "write_console_input_failed", <int>err_code)
+            elif nogil_status == 5:
+                return (False, "deferred_user_typing", 0)
+            elif nogil_status == 6:
+                return (False, "user_typing_check_failed", <int>err_code)
             return (True, "ok", 0)
         finally:
             CloseHandle(h_proc)
@@ -527,6 +744,7 @@ cpdef bint inject_console_input(
     double submit_delay_sec = 0.08,
     object expected_start_time = None,
     object allowed_images = None,
+    bint respect_user_typing = True,
 ):
     """
     bool 返却の互換入口。
@@ -547,5 +765,6 @@ cpdef bint inject_console_input(
         send_enter,
         submit_delay_sec,
         allowed_images=allowed_images,
+        respect_user_typing=respect_user_typing,
     )
     return bool(ok)

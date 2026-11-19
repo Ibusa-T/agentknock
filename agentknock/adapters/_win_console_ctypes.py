@@ -52,6 +52,12 @@ KEY_EVENT: Final[int] = 0x0001
 VK_RETURN: Final[int] = 0x0D
 MAPVK_VK_TO_VSC: Final[int] = 0
 
+TYPING_CURSOR_SAMPLE_SEC: Final[float] = 0.15
+TYPING_RETRY_DELAY_SEC: Final[float] = 0.4
+TYPING_MAX_RETRIES: Final[int] = 2
+MAX_PEEK_INPUT_EVENTS: Final[int] = 64
+MAX_CONSOLE_READ_COLS: Final[int] = 4096
+
 CCH_RM_SESSION_KEY: Final[int] = 32
 CCH_RM_MAX_APP_NAME: Final[int] = 255
 CCH_RM_MAX_SVC_NAME: Final[int] = 63
@@ -111,6 +117,32 @@ class INPUT_RECORD(ctypes.Structure):
     _fields_ = [
         ("EventType", wintypes.WORD),
         ("Event", _EVENT_UNION),
+    ]
+
+
+class COORD(ctypes.Structure):
+    _fields_ = [
+        ("X", wintypes.SHORT),
+        ("Y", wintypes.SHORT),
+    ]
+
+
+class SMALL_RECT(ctypes.Structure):
+    _fields_ = [
+        ("Left", wintypes.SHORT),
+        ("Top", wintypes.SHORT),
+        ("Right", wintypes.SHORT),
+        ("Bottom", wintypes.SHORT),
+    ]
+
+
+class CONSOLE_SCREEN_BUFFER_INFO(ctypes.Structure):
+    _fields_ = [
+        ("dwSize", COORD),
+        ("dwCursorPosition", COORD),
+        ("wAttributes", wintypes.WORD),
+        ("srWindow", SMALL_RECT),
+        ("dwMaximumWindowSize", COORD),
     ]
 
 
@@ -192,6 +224,35 @@ if sys.platform == "win32":
         ctypes.POINTER(wintypes.DWORD),
     ]
     _kernel32.WriteConsoleInputW.restype = wintypes.BOOL
+
+    _kernel32.GetNumberOfConsoleInputEvents.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    _kernel32.GetNumberOfConsoleInputEvents.restype = wintypes.BOOL
+
+    _kernel32.PeekConsoleInputW.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(INPUT_RECORD),
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    _kernel32.PeekConsoleInputW.restype = wintypes.BOOL
+
+    _kernel32.GetConsoleScreenBufferInfo.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(CONSOLE_SCREEN_BUFFER_INFO),
+    ]
+    _kernel32.GetConsoleScreenBufferInfo.restype = wintypes.BOOL
+
+    _kernel32.ReadConsoleOutputCharacterW.argtypes = [
+        wintypes.HANDLE,
+        wintypes.LPWSTR,
+        wintypes.DWORD,
+        COORD,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    _kernel32.ReadConsoleOutputCharacterW.restype = wintypes.BOOL
 
     _user32.MapVirtualKeyW.argtypes = [wintypes.UINT, wintypes.UINT]
     _user32.MapVirtualKeyW.restype = wintypes.UINT
@@ -430,6 +491,158 @@ def _make_key_record(
     return rec
 
 
+def _has_visible_text(line_prefix: str) -> bool:
+    """
+    Condition B: Skip leading prompt run (`>` at col 0 plus contiguous 0x20 spaces),
+    then return True if any remaining cell satisfies `ord(ch) > 0x20 and ord(ch) != 0x7F`.
+    """
+    if not line_prefix:
+        return False
+    start = 0
+    n = len(line_prefix)
+    if line_prefix[0] == ">":
+        start = 1
+        while start < n and line_prefix[start] == " ":
+            start += 1
+    for ch in line_prefix[start:]:
+        code = ord(ch)
+        if code > 0x20 and code != 0x7F:
+            return True
+    return False
+
+
+def _has_pending_console_key_input(h_conin: int) -> tuple[Optional[bool], int]:
+    """
+    Check 1: Detect queued KEY_EVENT (bKeyDown=True) on CONIN$ via PeekConsoleInputW.
+    Returns `(is_typing_or_None_on_error, win32_error)`.
+    """
+    get_num = getattr(_kernel32, "GetNumberOfConsoleInputEvents", None)
+    peek_fn = getattr(_kernel32, "PeekConsoleInputW", None)
+    if not callable(get_num) or not callable(peek_fn):
+        return (False, 0)
+
+    num_events = wintypes.DWORD(0)
+    if not get_num(h_conin, ctypes.byref(num_events)):
+        return (None, ctypes.get_last_error())
+
+    count = max(1, min(int(num_events.value), MAX_PEEK_INPUT_EVENTS))
+    buf = (INPUT_RECORD * count)()
+    read_count = wintypes.DWORD(0)
+    if not peek_fn(h_conin, buf, count, ctypes.byref(read_count)):
+        return (None, ctypes.get_last_error())
+
+    actual = min(int(read_count.value), count)
+    for i in range(actual):
+        rec = buf[i]
+        if rec.EventType == KEY_EVENT and bool(rec.Event.KeyEvent.bKeyDown):
+            return (True, 0)
+    return (False, 0)
+
+
+def _has_active_cursor_or_input_line(h_conout: int) -> tuple[Optional[bool], int]:
+    """
+    Check 2 (2-B standalone): Sample console buffer (150ms interval) and return True if
+    cursor X > 0 and cols 0..X-1 contain any visible char (> 0x20 and != 0x7F, including wide/non-ASCII).
+    Protects paused/thinking users even when cursor is stationary.
+    Returns `(is_typing_or_None_on_error, win32_error)`.
+    """
+    get_csbi = getattr(_kernel32, "GetConsoleScreenBufferInfo", None)
+    read_chars = getattr(_kernel32, "ReadConsoleOutputCharacterW", None)
+    if not callable(get_csbi) or not callable(read_chars):
+        return (False, 0)
+    if not _is_valid_handle(h_conout):
+        return (None, 0)
+
+    csbi_1 = CONSOLE_SCREEN_BUFFER_INFO()
+    if not get_csbi(h_conout, ctypes.byref(csbi_1)):
+        return (None, ctypes.get_last_error())
+
+    time.sleep(TYPING_CURSOR_SAMPLE_SEC)
+
+    csbi_2 = CONSOLE_SCREEN_BUFFER_INFO()
+    if not get_csbi(h_conout, ctypes.byref(csbi_2)):
+        return (None, ctypes.get_last_error())
+
+    cur_x = int(csbi_2.dwCursorPosition.X)
+    cur_y = int(csbi_2.dwCursorPosition.Y)
+    if cur_x <= 0 or cur_y < 0:
+        return (False, 0)
+
+    read_len = min(cur_x, MAX_CONSOLE_READ_COLS)
+    char_buf = ctypes.create_unicode_buffer(read_len + 1)
+    chars_read = wintypes.DWORD(0)
+    coord = COORD(0, cur_y)
+    if not read_chars(h_conout, char_buf, read_len, coord, ctypes.byref(chars_read)):
+        return (None, ctypes.get_last_error())
+
+    actual_len = min(int(chars_read.value), read_len)
+    if actual_len <= 0:
+        return (False, 0)
+
+    return (_has_visible_text(char_buf[:actual_len]), 0)
+
+
+def _is_user_typing_with_retries(h_proc: int, h_conin: int) -> tuple[str, int]:
+    """
+    Run User-Typing Collision Guard with bounded retries (max 2 retries at 0.4s).
+    Returns `(status_code, win32_error)` where status_code is one of:
+    - `"ok"`: clear to inject
+    - `"deferred_user_typing"`: still typing after retries
+    - `"process_already_exited"`: target exited during retry wait
+    - `"user_typing_check_failed"`: Win32 console inspection API failed
+    """
+    can_check_events = callable(
+        getattr(_kernel32, "GetNumberOfConsoleInputEvents", None)
+    ) and callable(getattr(_kernel32, "PeekConsoleInputW", None))
+    can_check_screen = callable(
+        getattr(_kernel32, "GetConsoleScreenBufferInfo", None)
+    ) and callable(getattr(_kernel32, "ReadConsoleOutputCharacterW", None))
+    if not can_check_events and not can_check_screen:
+        return ("ok", 0)
+
+    h_conout = None
+    try:
+        for attempt in range(TYPING_MAX_RETRIES + 1):
+            if attempt > 0 and _kernel32.WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
+                return ("process_already_exited", 0)
+
+            typing_now = False
+            if can_check_events:
+                ev_typing, ev_err = _has_pending_console_key_input(h_conin)
+                if ev_typing is None:
+                    return ("user_typing_check_failed", ev_err)
+                typing_now = ev_typing
+
+            if can_check_screen:
+                if h_conout is None:
+                    h_conout = _kernel32.CreateFileW(
+                        "CONOUT$",
+                        GENERIC_READ,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE,
+                        None,
+                        OPEN_EXISTING,
+                        0,
+                        None,
+                    )
+                    if not _is_valid_handle(h_conout):
+                        return ("user_typing_check_failed", ctypes.get_last_error())
+                scr_typing, scr_err = _has_active_cursor_or_input_line(h_conout)
+                if scr_typing is None:
+                    return ("user_typing_check_failed", scr_err)
+                typing_now = typing_now or scr_typing
+
+            if not typing_now:
+                return ("ok", 0)
+
+            if attempt < TYPING_MAX_RETRIES:
+                time.sleep(TYPING_RETRY_DELAY_SEC)
+
+        return ("deferred_user_typing", 0)
+    finally:
+        if _is_valid_handle(h_conout):
+            _kernel32.CloseHandle(h_conout)
+
+
 def inject_console_input_verified(
     target_pid: int,
     expected_start_time: int,
@@ -438,6 +651,7 @@ def inject_console_input_verified(
     submit_delay_sec: float = 0.08,
     *,
     allowed_images: Optional[Sequence[str]] = None,
+    respect_user_typing: bool = True,
 ) -> tuple[bool, str, int]:
     """
     Kernel HANDLE-pinned & ProcessStartTime-verified CONIN$ injection.
@@ -524,6 +738,11 @@ def inject_console_input_verified(
             if _kernel32.WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
                 return (False, "process_already_exited", 0)
 
+            if respect_user_typing:
+                guard_status, guard_err = _is_user_typing_with_retries(h_proc, h_conin)
+                if guard_status != "ok":
+                    return (False, guard_status, guard_err)
+
             if text:
                 utf16_units = text.encode("utf-16-le")
                 unit_count = len(utf16_units) // 2
@@ -594,6 +813,7 @@ def inject_console_input(
     *,
     expected_start_time: Optional[int] = None,
     allowed_images: Optional[Sequence[str]] = None,
+    respect_user_typing: bool = True,
 ) -> bool:
     """
     Boolean-returning entrypoint.
@@ -609,11 +829,12 @@ def inject_console_input(
         return False
 
     ok, _, _ = inject_console_input_verified(
-        target_pid=target_pid,
-        expected_start_time=expected_start_time,
-        text=text,
-        send_enter=send_enter,
-        submit_delay_sec=submit_delay_sec,
+        target_pid,
+        expected_start_time,
+        text,
+        send_enter,
+        submit_delay_sec,
         allowed_images=allowed_images,
+        respect_user_typing=respect_user_typing,
     )
     return ok

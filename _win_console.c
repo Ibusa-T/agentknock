@@ -2,24 +2,6 @@
 /* Copyright (c) 2026 Ibusa-T
  * SPDX-License-Identifier: AGPL-3.0-or-later */
 
-/* BEGIN: Cython Metadata
-{
-    "distutils": {
-        "depends": [],
-        "libraries": [
-            "kernel32",
-            "user32",
-            "rstrtmgr"
-        ],
-        "name": "_win_console",
-        "sources": [
-            "_win_console.pyx"
-        ]
-    },
-    "module_name": "_win_console"
-}
-END: Cython Metadata */
-
 #ifndef PY_SSIZE_T_CLEAN
 #define PY_SSIZE_T_CLEAN
 #endif /* PY_SSIZE_T_CLEAN */
@@ -1278,6 +1260,7 @@ static int __Pyx_init_tpflags_variables(void) {
 #include <stdint.h>
 
     #define CONIN_DEVICE_NAME L"CONIN$"
+    #define CONOUT_DEVICE_NAME L"CONOUT$"
     #define WCHAR_CR L'\r'
     
 #include <windows.h>
@@ -1693,7 +1676,7 @@ struct __pyx_opt_args_12_win_console_find_pid_by_lock_path;
 struct __pyx_opt_args_12_win_console_inject_console_input_verified;
 struct __pyx_opt_args_12_win_console_inject_console_input;
 
-/* "_win_console.pyx":215
+/* "_win_console.pyx":256
  * # ============================================================================
  * 
  * cpdef object find_process_by_lock_path(             # <<<<<<<<<<<<<<
@@ -1706,7 +1689,7 @@ struct __pyx_opt_args_12_win_console_find_process_by_lock_path {
   int same_session_only;
 };
 
-/* "_win_console.pyx":340
+/* "_win_console.pyx":381
  * 
  * 
  * cpdef object find_pid_by_lock_path(str lock_path, object allowed_images = None):             # <<<<<<<<<<<<<<
@@ -1718,7 +1701,7 @@ struct __pyx_opt_args_12_win_console_find_pid_by_lock_path {
   PyObject *allowed_images;
 };
 
-/* "_win_console.pyx":369
+/* "_win_console.pyx":578
  * 
  * 
  * cpdef tuple inject_console_input_verified(             # <<<<<<<<<<<<<<
@@ -1731,9 +1714,10 @@ struct __pyx_opt_args_12_win_console_inject_console_input_verified {
   int send_enter;
   double submit_delay_sec;
   PyObject *allowed_images;
+  int respect_user_typing;
 };
 
-/* "_win_console.pyx":523
+/* "_win_console.pyx":740
  * 
  * 
  * cpdef bint inject_console_input(             # <<<<<<<<<<<<<<
@@ -1747,6 +1731,7 @@ struct __pyx_opt_args_12_win_console_inject_console_input {
   double submit_delay_sec;
   PyObject *expected_start_time;
   PyObject *allowed_images;
+  int respect_user_typing;
 };
 /* #### Code section: utility_code_proto ### */
 
@@ -2630,8 +2615,14 @@ static CYTHON_INLINE PyObject* __Pyx_PyLong_From_int(int value);
 /* CIntToPy.proto */
 static CYTHON_INLINE PyObject* __Pyx_PyLong_From_long(long value);
 
+/* CIntToPy.proto */
+static CYTHON_INLINE PyObject* __Pyx_PyLong_From_DWORD(DWORD value);
+
 /* CIntFromPy.proto */
 static CYTHON_INLINE DWORD __Pyx_PyLong_As_DWORD(PyObject *);
+
+/* CIntToPy.proto */
+static CYTHON_INLINE PyObject* __Pyx_PyLong_From_BOOL(BOOL value);
 
 /* CIntFromPy.proto */
 static CYTHON_INLINE uint64_t __Pyx_PyLong_As_uint64_t(PyObject *);
@@ -2745,6 +2736,10 @@ static CYTHON_INLINE uint64_t __pyx_f_12_win_console__ft_to_u64(FILETIME); /*pro
 static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *, int __pyx_skip_dispatch, struct __pyx_opt_args_12_win_console_find_process_by_lock_path *__pyx_optional_args); /*proto*/
 static PyObject *__pyx_f_12_win_console_find_pid_by_lock_path(PyObject *, int __pyx_skip_dispatch, struct __pyx_opt_args_12_win_console_find_pid_by_lock_path *__pyx_optional_args); /*proto*/
 static CYTHON_INLINE void __pyx_f_12_win_console__init_key_record(INPUT_RECORD *, WCHAR, WORD, WORD, BOOL); /*proto*/
+static CYTHON_INLINE int __pyx_f_12_win_console__has_visible_w(WCHAR const *, DWORD); /*proto*/
+static int __pyx_f_12_win_console__has_pending_console_key_input_c(HANDLE, DWORD *); /*proto*/
+static int __pyx_f_12_win_console__has_active_cursor_or_input_line_c(HANDLE, DWORD *); /*proto*/
+static int __pyx_f_12_win_console__check_user_typing_with_retries_c(HANDLE, HANDLE, DWORD *); /*proto*/
 static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *, PyObject *, int __pyx_skip_dispatch, struct __pyx_opt_args_12_win_console_inject_console_input_verified *__pyx_optional_args); /*proto*/
 static int __pyx_f_12_win_console_inject_console_input(PyObject *, int __pyx_skip_dispatch, struct __pyx_opt_args_12_win_console_inject_console_input *__pyx_optional_args); /*proto*/
 /* #### Code section: typeinfo ### */
@@ -2762,8 +2757,8 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
 static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED PyObject *__pyx_self, unsigned long __pyx_v_pid); /* proto */
 static PyObject *__pyx_pf_12_win_console_4find_process_by_lock_path(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_lock_path, PyObject *__pyx_v_allowed_images, int __pyx_v_same_session_only); /* proto */
 static PyObject *__pyx_pf_12_win_console_6find_pid_by_lock_path(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_lock_path, PyObject *__pyx_v_allowed_images); /* proto */
-static PyObject *__pyx_pf_12_win_console_8inject_console_input_verified(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_target_pid, PyObject *__pyx_v_expected_start_time, PyObject *__pyx_v_text, int __pyx_v_send_enter, double __pyx_v_submit_delay_sec, PyObject *__pyx_v_allowed_images); /* proto */
-static PyObject *__pyx_pf_12_win_console_10inject_console_input(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_target_pid, PyObject *__pyx_v_text, int __pyx_v_send_enter, double __pyx_v_submit_delay_sec, PyObject *__pyx_v_expected_start_time, PyObject *__pyx_v_allowed_images); /* proto */
+static PyObject *__pyx_pf_12_win_console_8inject_console_input_verified(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_target_pid, PyObject *__pyx_v_expected_start_time, PyObject *__pyx_v_text, int __pyx_v_send_enter, double __pyx_v_submit_delay_sec, PyObject *__pyx_v_allowed_images, int __pyx_v_respect_user_typing); /* proto */
+static PyObject *__pyx_pf_12_win_console_10inject_console_input(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_target_pid, PyObject *__pyx_v_text, int __pyx_v_send_enter, double __pyx_v_submit_delay_sec, PyObject *__pyx_v_expected_start_time, PyObject *__pyx_v_allowed_images, int __pyx_v_respect_user_typing); /* proto */
 /* #### Code section: late_includes ### */
 /* #### Code section: module_state ### */
 /* SmallCodeConfig */
@@ -2790,9 +2785,9 @@ namespace {
     __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_items;
     __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_pop;
     __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_values;
-    PyObject *__pyx_tuple[10];
+    PyObject *__pyx_tuple[11];
     PyObject *__pyx_codeobj_tab[6];
-    PyObject *__pyx_string_tab[70];
+    PyObject *__pyx_string_tab[73];
     PyObject *__pyx_number_tab[2];
 /* #### Code section: module_state_contents ### */
 /* IterNextPlain.module_state_decls */
@@ -2877,46 +2872,49 @@ static __pyx_mstatetype * const __pyx_mstate_global = &__pyx_mstate_global_stati
 #define __pyx_n_u_cline_in_traceback __pyx_string_tab[27]
 #define __pyx_n_u_conin_open_failed __pyx_string_tab[28]
 #define __pyx_n_u_cython __pyx_string_tab[29]
-#define __pyx_n_u_expected_start_time __pyx_string_tab[30]
-#define __pyx_n_u_find_pid_by_lock_path __pyx_string_tab[31]
-#define __pyx_n_u_find_process_by_lock_path __pyx_string_tab[32]
-#define __pyx_n_u_get_process_times_failed __pyx_string_tab[33]
-#define __pyx_n_u_h __pyx_string_tab[34]
-#define __pyx_n_u_image_name_mismatch __pyx_string_tab[35]
-#define __pyx_n_u_image_query_failed __pyx_string_tab[36]
-#define __pyx_n_u_img __pyx_string_tab[37]
-#define __pyx_n_u_inject_console_input __pyx_string_tab[38]
-#define __pyx_n_u_inject_console_input_verified __pyx_string_tab[39]
-#define __pyx_n_u_invalid_pid_or_start_time __pyx_string_tab[40]
-#define __pyx_n_u_items __pyx_string_tab[41]
-#define __pyx_n_u_lock_path __pyx_string_tab[42]
-#define __pyx_n_u_lower __pyx_string_tab[43]
-#define __pyx_n_u_next __pyx_string_tab[44]
-#define __pyx_n_u_ok __pyx_string_tab[45]
-#define __pyx_n_u_open_process_failed __pyx_string_tab[46]
-#define __pyx_n_u_os __pyx_string_tab[47]
-#define __pyx_n_u_path __pyx_string_tab[48]
-#define __pyx_n_u_path_str __pyx_string_tab[49]
-#define __pyx_n_u_pid __pyx_string_tab[50]
-#define __pyx_n_u_pid_reused_start_time_mismatch __pyx_string_tab[51]
-#define __pyx_n_u_pop __pyx_string_tab[52]
-#define __pyx_n_u_process_already_exited __pyx_string_tab[53]
-#define __pyx_n_u_same_session_only __pyx_string_tab[54]
-#define __pyx_n_u_send_enter __pyx_string_tab[55]
-#define __pyx_n_u_setdefault __pyx_string_tab[56]
-#define __pyx_n_u_strip __pyx_string_tab[57]
-#define __pyx_n_u_submit_delay_sec __pyx_string_tab[58]
-#define __pyx_n_u_target_pid __pyx_string_tab[59]
-#define __pyx_n_u_text __pyx_string_tab[60]
-#define __pyx_n_u_values __pyx_string_tab[61]
-#define __pyx_n_u_write_console_input_failed __pyx_string_tab[62]
-#define __pyx_n_u__2 __pyx_string_tab[63]
-#define __pyx_kp_b_iso88591_c_q_1Be9AS_fBfCt7_QTTWWXX_bbc __pyx_string_tab[64]
-#define __pyx_kp_b_iso88591_Kq_C3gQ_r_E_Bc_q_4_S_Qa_1_1_r_i __pyx_string_tab[65]
-#define __pyx_kp_b_iso88591_t1_q_1A_7_t3a_Cq_q_1_aq_3a_k_7 __pyx_string_tab[66]
-#define __pyx_kp_b_iso88591_Ja_1_Ql_c_4z_q_Q_1_s_4A_1A_7_t3 __pyx_string_tab[67]
-#define __pyx_kp_b_iso88591_q_Cq_4z_q_Q_1_s_q_4_A_4q __pyx_string_tab[68]
-#define __pyx_kp_b_iso88591_J_C1_y_1_q_81A __pyx_string_tab[69]
+#define __pyx_n_u_deferred_user_typing __pyx_string_tab[30]
+#define __pyx_n_u_expected_start_time __pyx_string_tab[31]
+#define __pyx_n_u_find_pid_by_lock_path __pyx_string_tab[32]
+#define __pyx_n_u_find_process_by_lock_path __pyx_string_tab[33]
+#define __pyx_n_u_get_process_times_failed __pyx_string_tab[34]
+#define __pyx_n_u_h __pyx_string_tab[35]
+#define __pyx_n_u_image_name_mismatch __pyx_string_tab[36]
+#define __pyx_n_u_image_query_failed __pyx_string_tab[37]
+#define __pyx_n_u_img __pyx_string_tab[38]
+#define __pyx_n_u_inject_console_input __pyx_string_tab[39]
+#define __pyx_n_u_inject_console_input_verified __pyx_string_tab[40]
+#define __pyx_n_u_invalid_pid_or_start_time __pyx_string_tab[41]
+#define __pyx_n_u_items __pyx_string_tab[42]
+#define __pyx_n_u_lock_path __pyx_string_tab[43]
+#define __pyx_n_u_lower __pyx_string_tab[44]
+#define __pyx_n_u_next __pyx_string_tab[45]
+#define __pyx_n_u_ok __pyx_string_tab[46]
+#define __pyx_n_u_open_process_failed __pyx_string_tab[47]
+#define __pyx_n_u_os __pyx_string_tab[48]
+#define __pyx_n_u_path __pyx_string_tab[49]
+#define __pyx_n_u_path_str __pyx_string_tab[50]
+#define __pyx_n_u_pid __pyx_string_tab[51]
+#define __pyx_n_u_pid_reused_start_time_mismatch __pyx_string_tab[52]
+#define __pyx_n_u_pop __pyx_string_tab[53]
+#define __pyx_n_u_process_already_exited __pyx_string_tab[54]
+#define __pyx_n_u_respect_user_typing __pyx_string_tab[55]
+#define __pyx_n_u_same_session_only __pyx_string_tab[56]
+#define __pyx_n_u_send_enter __pyx_string_tab[57]
+#define __pyx_n_u_setdefault __pyx_string_tab[58]
+#define __pyx_n_u_strip __pyx_string_tab[59]
+#define __pyx_n_u_submit_delay_sec __pyx_string_tab[60]
+#define __pyx_n_u_target_pid __pyx_string_tab[61]
+#define __pyx_n_u_text __pyx_string_tab[62]
+#define __pyx_n_u_user_typing_check_failed __pyx_string_tab[63]
+#define __pyx_n_u_values __pyx_string_tab[64]
+#define __pyx_n_u_write_console_input_failed __pyx_string_tab[65]
+#define __pyx_n_u__2 __pyx_string_tab[66]
+#define __pyx_kp_b_iso88591_c_q_1Be9AS_fBfCt7_QTTWWXX_bbc __pyx_string_tab[67]
+#define __pyx_kp_b_iso88591_Kq_C3gQ_r_E_Bc_q_4_S_Qa_1_1_r_i __pyx_string_tab[68]
+#define __pyx_kp_b_iso88591_t1_q_1A_7_t3a_Cq_q_1_aq_3a_k_7 __pyx_string_tab[69]
+#define __pyx_kp_b_iso88591_Ja_1_Ql_c_4z_q_Q_1_s_4A_1A_7_t3 __pyx_string_tab[70]
+#define __pyx_kp_b_iso88591_q_Cq_4z_q_Q_1_s_q_4_A_4q __pyx_string_tab[71]
+#define __pyx_kp_b_iso88591_J_C1_y_1_q_81A __pyx_string_tab[72]
 #define __pyx_float_0_08 __pyx_number_tab[0]
 #define __pyx_int_0 __pyx_number_tab[1]
 /* #### Code section: module_state_clear ### */
@@ -2936,9 +2934,9 @@ static CYTHON_SMALL_CODE int __pyx_m_clear(PyObject *m) {
   Py_CLEAR(clear_module_state->__pyx_umethod_PyDict_Type_items.method);
   Py_CLEAR(clear_module_state->__pyx_umethod_PyDict_Type_pop.method);
   Py_CLEAR(clear_module_state->__pyx_umethod_PyDict_Type_values.method);
-  for (int i=0; i<10; ++i) { Py_CLEAR(clear_module_state->__pyx_tuple[i]); }
+  for (int i=0; i<11; ++i) { Py_CLEAR(clear_module_state->__pyx_tuple[i]); }
   for (int i=0; i<6; ++i) { Py_CLEAR(clear_module_state->__pyx_codeobj_tab[i]); }
-  for (int i=0; i<70; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<73; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
   for (int i=0; i<2; ++i) { Py_CLEAR(clear_module_state->__pyx_number_tab[i]); }
 /* #### Code section: module_state_clear_contents ### */
 /* CommonTypesMetaclass.module_state_clear */
@@ -2965,9 +2963,9 @@ static CYTHON_SMALL_CODE int __pyx_m_traverse(PyObject *m, visitproc visit, void
   Py_VISIT(traverse_module_state->__pyx_umethod_PyDict_Type_items.method);
   Py_VISIT(traverse_module_state->__pyx_umethod_PyDict_Type_pop.method);
   Py_VISIT(traverse_module_state->__pyx_umethod_PyDict_Type_values.method);
-  for (int i=0; i<10; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_tuple[i]); }
+  for (int i=0; i<11; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_tuple[i]); }
   for (int i=0; i<6; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_codeobj_tab[i]); }
-  for (int i=0; i<70; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<73; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
   for (int i=0; i<2; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_number_tab[i]); }
 /* #### Code section: module_state_traverse_contents ### */
 /* CommonTypesMetaclass.module_state_traverse */
@@ -2982,7 +2980,7 @@ return 0;
 #endif
 /* #### Code section: module_code ### */
 
-/* "_win_console.pyx":185
+/* "_win_console.pyx":226
  * 
  * 
  * cdef inline uint64_t _ft_to_u64(FILETIME ft) noexcept nogil:             # <<<<<<<<<<<<<<
@@ -2993,7 +2991,7 @@ return 0;
 static CYTHON_INLINE uint64_t __pyx_f_12_win_console__ft_to_u64(FILETIME __pyx_v_ft) {
   uint64_t __pyx_r;
 
-  /* "_win_console.pyx":186
+  /* "_win_console.pyx":227
  * 
  * cdef inline uint64_t _ft_to_u64(FILETIME ft) noexcept nogil:
  *     return ((<uint64_t>ft.dwHighDateTime) << 32) | (<uint64_t>ft.dwLowDateTime)             # <<<<<<<<<<<<<<
@@ -3006,7 +3004,7 @@ static CYTHON_INLINE uint64_t __pyx_f_12_win_console__ft_to_u64(FILETIME __pyx_v
   }
   goto __pyx_L0;
 
-  /* "_win_console.pyx":185
+  /* "_win_console.pyx":226
  * 
  * 
  * cdef inline uint64_t _ft_to_u64(FILETIME ft) noexcept nogil:             # <<<<<<<<<<<<<<
@@ -3019,7 +3017,7 @@ static CYTHON_INLINE uint64_t __pyx_f_12_win_console__ft_to_u64(FILETIME __pyx_v
   return __pyx_r;
 }
 
-/* "_win_console.pyx":189
+/* "_win_console.pyx":230
  * 
  * 
  * def _normalize_allowed_images(object allowed_images):             # <<<<<<<<<<<<<<
@@ -3066,32 +3064,32 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_allowed_images,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len < 0)) __PYX_ERR(0, 189, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len < 0)) __PYX_ERR(0, 230, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 189, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 230, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "_normalize_allowed_images", 0) < (0)) __PYX_ERR(0, 189, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "_normalize_allowed_images", 0) < (0)) __PYX_ERR(0, 230, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("_normalize_allowed_images", 1, 1, 1, i); __PYX_ERR(0, 189, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("_normalize_allowed_images", 1, 1, 1, i); __PYX_ERR(0, 230, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 1)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 189, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 230, __pyx_L3_error)
     }
     __pyx_v_allowed_images = values[0];
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("_normalize_allowed_images", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 189, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("_normalize_allowed_images", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 230, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -3135,7 +3133,7 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("_normalize_allowed_images", 0);
 
-  /* "_win_console.pyx":190
+  /* "_win_console.pyx":231
  * 
  * def _normalize_allowed_images(object allowed_images):
  *     if allowed_images is None:             # <<<<<<<<<<<<<<
@@ -3146,7 +3144,7 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
   if (__pyx_t_1) {
 
 
-    /* "_win_console.pyx":191
+    /* "_win_console.pyx":232
  * def _normalize_allowed_images(object allowed_images):
  *     if allowed_images is None:
  *         return None             # <<<<<<<<<<<<<<
@@ -3163,7 +3161,7 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
     }
     goto __pyx_L0;
 
-    /* "_win_console.pyx":190
+    /* "_win_console.pyx":231
  * 
  * def _normalize_allowed_images(object allowed_images):
  *     if allowed_images is None:             # <<<<<<<<<<<<<<
@@ -3172,7 +3170,7 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
 */
   }
 
-  /* "_win_console.pyx":192
+  /* "_win_console.pyx":233
  *     if allowed_images is None:
  *         return None
  *     return {os.path.basename(str(img)).strip().lower() for img in allowed_images if str(img).strip()}             # <<<<<<<<<<<<<<
@@ -3180,16 +3178,16 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
  * 
 */
   { /* enter inner scope */
-    __pyx_t_2 = PySet_New(NULL); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 192, __pyx_L6_error)
+    __pyx_t_2 = PySet_New(NULL); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 233, __pyx_L6_error)
     __Pyx_GOTREF(__pyx_t_2);
     if (likely(PyList_CheckExact(__pyx_v_allowed_images)) || PyTuple_CheckExact(__pyx_v_allowed_images)) {
       __pyx_t_3 = __pyx_v_allowed_images; __Pyx_INCREF(__pyx_t_3);
       __pyx_t_4 = 0;
       __pyx_t_5 = NULL;
     } else {
-      __pyx_t_4 = -1; __pyx_t_3 = PyObject_GetIter(__pyx_v_allowed_images); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 192, __pyx_L6_error)
+      __pyx_t_4 = -1; __pyx_t_3 = PyObject_GetIter(__pyx_v_allowed_images); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 233, __pyx_L6_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_5 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_3); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 192, __pyx_L6_error)
+      __pyx_t_5 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_3); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 233, __pyx_L6_error)
     }
     for (;;) {
       if (likely(!__pyx_t_5)) {
@@ -3197,7 +3195,7 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
           {
             Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_t_3);
             #if !CYTHON_ASSUME_SAFE_SIZE
-            if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 192, __pyx_L6_error)
+            if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 233, __pyx_L6_error)
             #endif
             if (__pyx_t_4 >= __pyx_temp) break;
           }
@@ -3207,7 +3205,7 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
           {
             Py_ssize_t __pyx_temp = __Pyx_PyTuple_GET_SIZE(__pyx_t_3);
             #if !CYTHON_ASSUME_SAFE_SIZE
-            if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 192, __pyx_L6_error)
+            if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 233, __pyx_L6_error)
             #endif
             if (__pyx_t_4 >= __pyx_temp) break;
           }
@@ -3218,13 +3216,13 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
           #endif
           ++__pyx_t_4;
         }
-        if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 192, __pyx_L6_error)
+        if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 233, __pyx_L6_error)
       } else {
         __pyx_t_6 = __pyx_t_5(__pyx_t_3);
         if (unlikely(!__pyx_t_6)) {
           PyObject* exc_type = PyErr_Occurred();
           if (exc_type) {
-            if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 192, __pyx_L6_error)
+            if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 233, __pyx_L6_error)
             PyErr_Clear();
           }
           break;
@@ -3233,7 +3231,7 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
       __Pyx_GOTREF(__pyx_t_6);
       __Pyx_XDECREF_SET(__pyx_7genexpr__pyx_v_img, __pyx_t_6);
       __pyx_t_6 = 0;
-      __pyx_t_8 = __Pyx_PyObject_Unicode(__pyx_7genexpr__pyx_v_img); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 192, __pyx_L6_error)
+      __pyx_t_8 = __Pyx_PyObject_Unicode(__pyx_7genexpr__pyx_v_img); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 233, __pyx_L6_error)
       __Pyx_GOTREF(__pyx_t_8);
       __pyx_t_7 = __pyx_t_8;
       __Pyx_INCREF(__pyx_t_7);
@@ -3243,29 +3241,29 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
         __pyx_t_6 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_strip, __pyx_callargs+__pyx_t_9, (1-__pyx_t_9) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
         __Pyx_XDECREF(__pyx_t_7); __pyx_t_7 = 0;
         __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
-        if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 192, __pyx_L6_error)
+        if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 233, __pyx_L6_error)
         __Pyx_GOTREF(__pyx_t_6);
       }
-      if (!(likely(PyUnicode_CheckExact(__pyx_t_6))||((__pyx_t_6) == Py_None) || __Pyx_RaiseUnexpectedTypeError("str", __pyx_t_6))) __PYX_ERR(0, 192, __pyx_L6_error)
+      if (!(likely(PyUnicode_CheckExact(__pyx_t_6))||((__pyx_t_6) == Py_None) || __Pyx_RaiseUnexpectedTypeError("str", __pyx_t_6))) __PYX_ERR(0, 233, __pyx_L6_error)
       if (__pyx_t_6 == Py_None) __pyx_t_1 = 0;
       else
       {
         Py_ssize_t __pyx_temp = __Pyx_PyUnicode_IS_TRUE(__pyx_t_6);
-        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 192, __pyx_L6_error)
+        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 233, __pyx_L6_error)
         __pyx_t_1 = (__pyx_temp != 0);
       }
 
       __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
       if (__pyx_t_1) {
 
-        __Pyx_GetModuleGlobalName(__pyx_t_13, __pyx_mstate_global->__pyx_n_u_os); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 192, __pyx_L6_error)
+        __Pyx_GetModuleGlobalName(__pyx_t_13, __pyx_mstate_global->__pyx_n_u_os); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 233, __pyx_L6_error)
         __Pyx_GOTREF(__pyx_t_13);
-        __pyx_t_14 = __Pyx_PyObject_GetAttrStr(__pyx_t_13, __pyx_mstate_global->__pyx_n_u_path); if (unlikely(!__pyx_t_14)) __PYX_ERR(0, 192, __pyx_L6_error)
+        __pyx_t_14 = __Pyx_PyObject_GetAttrStr(__pyx_t_13, __pyx_mstate_global->__pyx_n_u_path); if (unlikely(!__pyx_t_14)) __PYX_ERR(0, 233, __pyx_L6_error)
         __Pyx_GOTREF(__pyx_t_14);
         __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
         __pyx_t_12 = __pyx_t_14;
         __Pyx_INCREF(__pyx_t_12);
-        __pyx_t_13 = __Pyx_PyObject_Unicode(__pyx_7genexpr__pyx_v_img); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 192, __pyx_L6_error)
+        __pyx_t_13 = __Pyx_PyObject_Unicode(__pyx_7genexpr__pyx_v_img); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 233, __pyx_L6_error)
         __Pyx_GOTREF(__pyx_t_13);
         __pyx_t_9 = 0;
         {
@@ -3274,7 +3272,7 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
           __Pyx_XDECREF(__pyx_t_12); __pyx_t_12 = 0;
           __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
           __Pyx_DECREF(__pyx_t_14); __pyx_t_14 = 0;
-          if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 192, __pyx_L6_error)
+          if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 233, __pyx_L6_error)
           __Pyx_GOTREF(__pyx_t_11);
         }
         __pyx_t_10 = __pyx_t_11;
@@ -3285,7 +3283,7 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
           __pyx_t_7 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_strip, __pyx_callargs+__pyx_t_9, (1-__pyx_t_9) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
           __Pyx_XDECREF(__pyx_t_10); __pyx_t_10 = 0;
           __Pyx_DECREF(__pyx_t_11); __pyx_t_11 = 0;
-          if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 192, __pyx_L6_error)
+          if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 233, __pyx_L6_error)
           __Pyx_GOTREF(__pyx_t_7);
         }
         __pyx_t_8 = __pyx_t_7;
@@ -3296,10 +3294,10 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
           __pyx_t_6 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_lower, __pyx_callargs+__pyx_t_9, (1-__pyx_t_9) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
           __Pyx_XDECREF(__pyx_t_8); __pyx_t_8 = 0;
           __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
-          if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 192, __pyx_L6_error)
+          if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 233, __pyx_L6_error)
           __Pyx_GOTREF(__pyx_t_6);
         }
-        if (unlikely(PySet_Add(__pyx_t_2, __pyx_t_6))) __PYX_ERR(0, 192, __pyx_L6_error)
+        if (unlikely(PySet_Add(__pyx_t_2, __pyx_t_6))) __PYX_ERR(0, 233, __pyx_L6_error)
         __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
       }
     }
@@ -3322,7 +3320,7 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
   __pyx_t_2 = 0;
   goto __pyx_L0;
 
-  /* "_win_console.pyx":189
+  /* "_win_console.pyx":230
  * 
  * 
  * def _normalize_allowed_images(object allowed_images):             # <<<<<<<<<<<<<<
@@ -3351,7 +3349,7 @@ static PyObject *__pyx_pf_12_win_console__normalize_allowed_images(CYTHON_UNUSED
   return __pyx_r;
 }
 
-/* "_win_console.pyx":195
+/* "_win_console.pyx":236
  * 
  * 
  * def _query_image_basename_py(unsigned long pid):             # <<<<<<<<<<<<<<
@@ -3399,32 +3397,32 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_pid,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len < 0)) __PYX_ERR(0, 195, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len < 0)) __PYX_ERR(0, 236, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 195, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 236, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "_query_image_basename_py", 0) < (0)) __PYX_ERR(0, 195, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "_query_image_basename_py", 0) < (0)) __PYX_ERR(0, 236, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("_query_image_basename_py", 1, 1, 1, i); __PYX_ERR(0, 195, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("_query_image_basename_py", 1, 1, 1, i); __PYX_ERR(0, 236, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 1)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 195, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 236, __pyx_L3_error)
     }
-    __pyx_v_pid = __Pyx_PyLong_As_unsigned_long(values[0]); if (unlikely((__pyx_v_pid == (unsigned long)-1) && PyErr_Occurred())) __PYX_ERR(0, 195, __pyx_L3_error)
+    __pyx_v_pid = __Pyx_PyLong_As_unsigned_long(values[0]); if (unlikely((__pyx_v_pid == (unsigned long)-1) && PyErr_Occurred())) __PYX_ERR(0, 236, __pyx_L3_error)
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("_query_image_basename_py", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 195, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("_query_image_basename_py", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 236, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -3476,7 +3474,7 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("_query_image_basename_py", 0);
 
-  /* "_win_console.pyx":197
+  /* "_win_console.pyx":238
  * def _query_image_basename_py(unsigned long pid):
  *     """Helper using OpenProcess + QueryFullProcessImageNameW for Python-side allowlist check."""
  *     cdef HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, <DWORD>pid)             # <<<<<<<<<<<<<<
@@ -3485,7 +3483,7 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
 */
   __pyx_v_h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, ((DWORD)__pyx_v_pid));
 
-  /* "_win_console.pyx":198
+  /* "_win_console.pyx":239
  *     """Helper using OpenProcess + QueryFullProcessImageNameW for Python-side allowlist check."""
  *     cdef HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, <DWORD>pid)
  *     if h == NULL or h == INVALID_HANDLE_VALUE:             # <<<<<<<<<<<<<<
@@ -3511,7 +3509,7 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
   if (__pyx_t_1) {
 
 
-    /* "_win_console.pyx":199
+    /* "_win_console.pyx":240
  *     cdef HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, <DWORD>pid)
  *     if h == NULL or h == INVALID_HANDLE_VALUE:
  *         return None             # <<<<<<<<<<<<<<
@@ -3528,7 +3526,7 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
     }
     goto __pyx_L0;
 
-    /* "_win_console.pyx":198
+    /* "_win_console.pyx":239
  *     """Helper using OpenProcess + QueryFullProcessImageNameW for Python-side allowlist check."""
  *     cdef HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, <DWORD>pid)
  *     if h == NULL or h == INVALID_HANDLE_VALUE:             # <<<<<<<<<<<<<<
@@ -3537,7 +3535,7 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
 */
   }
 
-  /* "_win_console.pyx":201
+  /* "_win_console.pyx":242
  *         return None
  *     cdef WCHAR buf[1024]
  *     cdef DWORD buf_size = 1024             # <<<<<<<<<<<<<<
@@ -3546,7 +3544,7 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
 */
   __pyx_v_buf_size = 0x400;
 
-  /* "_win_console.pyx":202
+  /* "_win_console.pyx":243
  *     cdef WCHAR buf[1024]
  *     cdef DWORD buf_size = 1024
  *     try:             # <<<<<<<<<<<<<<
@@ -3555,7 +3553,7 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
 */
   /*try:*/ {
 
-    /* "_win_console.pyx":203
+    /* "_win_console.pyx":244
  *     cdef DWORD buf_size = 1024
  *     try:
  *         if not QueryFullProcessImageNameW(h, 0, buf, &buf_size):             # <<<<<<<<<<<<<<
@@ -3567,7 +3565,7 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
     if (__pyx_t_1) {
 
 
-      /* "_win_console.pyx":204
+      /* "_win_console.pyx":245
  *     try:
  *         if not QueryFullProcessImageNameW(h, 0, buf, &buf_size):
  *             return None             # <<<<<<<<<<<<<<
@@ -3584,7 +3582,7 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
       }
       goto __pyx_L6_return;
 
-      /* "_win_console.pyx":203
+      /* "_win_console.pyx":244
  *     cdef DWORD buf_size = 1024
  *     try:
  *         if not QueryFullProcessImageNameW(h, 0, buf, &buf_size):             # <<<<<<<<<<<<<<
@@ -3593,28 +3591,28 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
 */
     }
 
-    /* "_win_console.pyx":205
+    /* "_win_console.pyx":246
  *         if not QueryFullProcessImageNameW(h, 0, buf, &buf_size):
  *             return None
  *         path_str = PyUnicode_FromWideChar(buf, <Py_ssize_t>buf_size)             # <<<<<<<<<<<<<<
  *         return os.path.basename(path_str).lower()
  *     finally:
 */
-    __pyx_t_3 = PyUnicode_FromWideChar(__pyx_v_buf, ((Py_ssize_t)__pyx_v_buf_size)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 205, __pyx_L7_error)
+    __pyx_t_3 = PyUnicode_FromWideChar(__pyx_v_buf, ((Py_ssize_t)__pyx_v_buf_size)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 246, __pyx_L7_error)
     __Pyx_GOTREF(__pyx_t_3);
     __pyx_v_path_str = __pyx_t_3;
     __pyx_t_3 = 0;
 
-    /* "_win_console.pyx":206
+    /* "_win_console.pyx":247
  *             return None
  *         path_str = PyUnicode_FromWideChar(buf, <Py_ssize_t>buf_size)
  *         return os.path.basename(path_str).lower()             # <<<<<<<<<<<<<<
  *     finally:
  *         CloseHandle(h)
 */
-    __Pyx_GetModuleGlobalName(__pyx_t_7, __pyx_mstate_global->__pyx_n_u_os); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 206, __pyx_L7_error)
+    __Pyx_GetModuleGlobalName(__pyx_t_7, __pyx_mstate_global->__pyx_n_u_os); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 247, __pyx_L7_error)
     __Pyx_GOTREF(__pyx_t_7);
-    __pyx_t_8 = __Pyx_PyObject_GetAttrStr(__pyx_t_7, __pyx_mstate_global->__pyx_n_u_path); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 206, __pyx_L7_error)
+    __pyx_t_8 = __Pyx_PyObject_GetAttrStr(__pyx_t_7, __pyx_mstate_global->__pyx_n_u_path); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 247, __pyx_L7_error)
     __Pyx_GOTREF(__pyx_t_8);
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __pyx_t_6 = __pyx_t_8;
@@ -3625,7 +3623,7 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
       __pyx_t_5 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_basename, __pyx_callargs+__pyx_t_9, (2-__pyx_t_9) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
       __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
       __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
-      if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 206, __pyx_L7_error)
+      if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 247, __pyx_L7_error)
       __Pyx_GOTREF(__pyx_t_5);
     }
     __pyx_t_4 = __pyx_t_5;
@@ -3636,7 +3634,7 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
       __pyx_t_3 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_lower, __pyx_callargs+__pyx_t_9, (1-__pyx_t_9) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
       __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
       __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 206, __pyx_L7_error)
+      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 247, __pyx_L7_error)
       __Pyx_GOTREF(__pyx_t_3);
     }
     {
@@ -3651,7 +3649,7 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
     goto __pyx_L6_return;
   }
 
-  /* "_win_console.pyx":208
+  /* "_win_console.pyx":249
  *         return os.path.basename(path_str).lower()
  *     finally:
  *         CloseHandle(h)             # <<<<<<<<<<<<<<
@@ -3704,7 +3702,7 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
     }
   }
 
-  /* "_win_console.pyx":195
+  /* "_win_console.pyx":236
  * 
  * 
  * def _query_image_basename_py(unsigned long pid):             # <<<<<<<<<<<<<<
@@ -3732,7 +3730,7 @@ static PyObject *__pyx_pf_12_win_console_2_query_image_basename_py(CYTHON_UNUSED
   return __pyx_r;
 }
 
-/* "_win_console.pyx":215
+/* "_win_console.pyx":256
  * # ============================================================================
  * 
  * cpdef object find_process_by_lock_path(             # <<<<<<<<<<<<<<
@@ -3749,7 +3747,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__pyx_v_lock_path, CYTHON_UNUSED int __pyx_skip_dispatch, struct __pyx_opt_args_12_win_console_find_process_by_lock_path *__pyx_optional_args) {
 
-  /* "_win_console.pyx":217
+  /* "_win_console.pyx":258
  * cpdef object find_process_by_lock_path(
  *     str lock_path,
  *     object allowed_images = None,             # <<<<<<<<<<<<<<
@@ -3758,7 +3756,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   PyObject *__pyx_v_allowed_images = ((PyObject *)Py_None);
 
-  /* "_win_console.pyx":218
+  /* "_win_console.pyx":259
  *     str lock_path,
  *     object allowed_images = None,
  *     bint same_session_only = True,             # <<<<<<<<<<<<<<
@@ -3831,7 +3829,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     }
   }
 
-  /* "_win_console.pyx":224
+  /* "_win_console.pyx":265
  *      None  (fail-closed)
  *     """
  *     if not lock_path:             # <<<<<<<<<<<<<<
@@ -3842,7 +3840,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
   else
   {
     Py_ssize_t __pyx_temp = __Pyx_PyUnicode_IS_TRUE(__pyx_v_lock_path);
-    if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 224, __pyx_L1_error)
+    if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 265, __pyx_L1_error)
     __pyx_t_1 = (__pyx_temp != 0);
   }
 
@@ -3852,7 +3850,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
   if (__pyx_t_2) {
 
 
-    /* "_win_console.pyx":225
+    /* "_win_console.pyx":266
  *     """
  *     if not lock_path:
  *         return None             # <<<<<<<<<<<<<<
@@ -3869,7 +3867,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     }
     goto __pyx_L0;
 
-    /* "_win_console.pyx":224
+    /* "_win_console.pyx":265
  *      None  (fail-closed)
  *     """
  *     if not lock_path:             # <<<<<<<<<<<<<<
@@ -3878,7 +3876,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   }
 
-  /* "_win_console.pyx":227
+  /* "_win_console.pyx":268
  *         return None
  * 
  *     allowed_set = _normalize_allowed_images(allowed_images)             # <<<<<<<<<<<<<<
@@ -3886,7 +3884,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
  *         return None
 */
   __pyx_t_4 = NULL;
-  __Pyx_GetModuleGlobalName(__pyx_t_5, __pyx_mstate_global->__pyx_n_u_normalize_allowed_images); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 227, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_5, __pyx_mstate_global->__pyx_n_u_normalize_allowed_images); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 268, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __pyx_t_6 = 1;
   #if CYTHON_UNPACK_METHODS
@@ -3905,13 +3903,13 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     __pyx_t_3 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_5, __pyx_callargs+__pyx_t_6, (2-__pyx_t_6) | (__pyx_t_6*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
     __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 227, __pyx_L1_error)
+    if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 268, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
   }
   __pyx_v_allowed_set = __pyx_t_3;
   __pyx_t_3 = 0;
 
-  /* "_win_console.pyx":228
+  /* "_win_console.pyx":269
  * 
  *     allowed_set = _normalize_allowed_images(allowed_images)
  *     if allowed_set is not None and len(allowed_set) == 0:             # <<<<<<<<<<<<<<
@@ -3927,7 +3925,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 
     goto __pyx_L5_bool_binop_done;
   }
-  __pyx_t_7 = PyObject_Length(__pyx_v_allowed_set); if (unlikely(__pyx_t_7 == ((Py_ssize_t)-1))) __PYX_ERR(0, 228, __pyx_L1_error)
+  __pyx_t_7 = PyObject_Length(__pyx_v_allowed_set); if (unlikely(__pyx_t_7 == ((Py_ssize_t)-1))) __PYX_ERR(0, 269, __pyx_L1_error)
   __pyx_t_1 = (__pyx_t_7 == 0);
 
 
@@ -3938,7 +3936,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
   if (__pyx_t_2) {
 
 
-    /* "_win_console.pyx":229
+    /* "_win_console.pyx":270
  *     allowed_set = _normalize_allowed_images(allowed_images)
  *     if allowed_set is not None and len(allowed_set) == 0:
  *         return None             # <<<<<<<<<<<<<<
@@ -3955,7 +3953,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     }
     goto __pyx_L0;
 
-    /* "_win_console.pyx":228
+    /* "_win_console.pyx":269
  * 
  *     allowed_set = _normalize_allowed_images(allowed_images)
  *     if allowed_set is not None and len(allowed_set) == 0:             # <<<<<<<<<<<<<<
@@ -3964,7 +3962,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   }
 
-  /* "_win_console.pyx":231
+  /* "_win_console.pyx":272
  *         return None
  * 
  *     cdef Py_ssize_t size = 0             # <<<<<<<<<<<<<<
@@ -3973,7 +3971,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_size = 0;
 
-  /* "_win_console.pyx":232
+  /* "_win_console.pyx":273
  * 
  *     cdef Py_ssize_t size = 0
  *     cdef wchar_t* lock_path_w = PyUnicode_AsWideCharString(lock_path, &size)             # <<<<<<<<<<<<<<
@@ -3982,7 +3980,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_lock_path_w = PyUnicode_AsWideCharString(__pyx_v_lock_path, (&__pyx_v_size));
 
-  /* "_win_console.pyx":233
+  /* "_win_console.pyx":274
  *     cdef Py_ssize_t size = 0
  *     cdef wchar_t* lock_path_w = PyUnicode_AsWideCharString(lock_path, &size)
  *     if lock_path_w == NULL:             # <<<<<<<<<<<<<<
@@ -3994,7 +3992,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
   if (unlikely(__pyx_t_2)) {
 
 
-    /* "_win_console.pyx":234
+    /* "_win_console.pyx":275
  *     cdef wchar_t* lock_path_w = PyUnicode_AsWideCharString(lock_path, &size)
  *     if lock_path_w == NULL:
  *         raise MemoryError("Failed to allocate wide char string for lock_path")             # <<<<<<<<<<<<<<
@@ -4007,14 +4005,14 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
       PyObject *__pyx_callargs[2] = {__pyx_t_5, __pyx_mstate_global->__pyx_kp_u_Failed_to_allocate_wide_char_str};
       __pyx_t_3 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_MemoryError)), __pyx_callargs+__pyx_t_6, (2-__pyx_t_6) | (__pyx_t_6*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
       __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 234, __pyx_L1_error)
+      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 275, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
     }
     __Pyx_Raise(__pyx_t_3, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-    __PYX_ERR(0, 234, __pyx_L1_error)
+    __PYX_ERR(0, 275, __pyx_L1_error)
 
-    /* "_win_console.pyx":233
+    /* "_win_console.pyx":274
  *     cdef Py_ssize_t size = 0
  *     cdef wchar_t* lock_path_w = PyUnicode_AsWideCharString(lock_path, &size)
  *     if lock_path_w == NULL:             # <<<<<<<<<<<<<<
@@ -4023,7 +4021,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   }
 
-  /* "_win_console.pyx":236
+  /* "_win_console.pyx":277
  *         raise MemoryError("Failed to allocate wide char string for lock_path")
  * 
  *     cdef DWORD session = 0             # <<<<<<<<<<<<<<
@@ -4032,7 +4030,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_session = 0;
 
-  /* "_win_console.pyx":238
+  /* "_win_console.pyx":279
  *     cdef DWORD session = 0
  *     cdef WCHAR session_key[CCH_RM_SESSION_KEY + 1]
  *     memset(session_key, 0, sizeof(session_key))             # <<<<<<<<<<<<<<
@@ -4041,7 +4039,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   (void)(memset(__pyx_v_session_key, 0, (sizeof(__pyx_v_session_key))));
 
-  /* "_win_console.pyx":241
+  /* "_win_console.pyx":282
  * 
  *     cdef LPCWSTR resources[1]
  *     resources[0] = lock_path_w             # <<<<<<<<<<<<<<
@@ -4050,7 +4048,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   (__pyx_v_resources[0]) = __pyx_v_lock_path_w;
 
-  /* "_win_console.pyx":243
+  /* "_win_console.pyx":284
  *     resources[0] = lock_path_w
  * 
  *     cdef UINT needed = 0             # <<<<<<<<<<<<<<
@@ -4059,7 +4057,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_needed = 0;
 
-  /* "_win_console.pyx":244
+  /* "_win_console.pyx":285
  * 
  *     cdef UINT needed = 0
  *     cdef UINT count = 0             # <<<<<<<<<<<<<<
@@ -4068,7 +4066,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_count = 0;
 
-  /* "_win_console.pyx":245
+  /* "_win_console.pyx":286
  *     cdef UINT needed = 0
  *     cdef UINT count = 0
  *     cdef DWORD reason = 0             # <<<<<<<<<<<<<<
@@ -4077,7 +4075,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_reason = 0;
 
-  /* "_win_console.pyx":246
+  /* "_win_console.pyx":287
  *     cdef UINT count = 0
  *     cdef DWORD reason = 0
  *     cdef DWORD res = 0             # <<<<<<<<<<<<<<
@@ -4086,7 +4084,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_res = 0;
 
-  /* "_win_console.pyx":247
+  /* "_win_console.pyx":288
  *     cdef DWORD reason = 0
  *     cdef DWORD res = 0
  *     cdef int retry = 0             # <<<<<<<<<<<<<<
@@ -4095,7 +4093,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_retry = 0;
 
-  /* "_win_console.pyx":248
+  /* "_win_console.pyx":289
  *     cdef DWORD res = 0
  *     cdef int retry = 0
  *     cdef UINT i = 0             # <<<<<<<<<<<<<<
@@ -4104,7 +4102,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_i = 0;
 
-  /* "_win_console.pyx":249
+  /* "_win_console.pyx":290
  *     cdef int retry = 0
  *     cdef UINT i = 0
  *     cdef RM_PROCESS_INFO* process_infos = NULL             # <<<<<<<<<<<<<<
@@ -4113,7 +4111,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_process_infos = NULL;
 
-  /* "_win_console.pyx":251
+  /* "_win_console.pyx":292
  *     cdef RM_PROCESS_INFO* process_infos = NULL
  * 
  *     cdef DWORD self_session = 0             # <<<<<<<<<<<<<<
@@ -4122,7 +4120,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_self_session = 0;
 
-  /* "_win_console.pyx":252
+  /* "_win_console.pyx":293
  * 
  *     cdef DWORD self_session = 0
  *     cdef BOOL has_self_session = ProcessIdToSessionId(GetCurrentProcessId(), &self_session)             # <<<<<<<<<<<<<<
@@ -4131,7 +4129,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_has_self_session = ProcessIdToSessionId(GetCurrentProcessId(), (&__pyx_v_self_session));
 
-  /* "_win_console.pyx":253
+  /* "_win_console.pyx":294
  *     cdef DWORD self_session = 0
  *     cdef BOOL has_self_session = ProcessIdToSessionId(GetCurrentProcessId(), &self_session)
  *     if same_session_only and not has_self_session:             # <<<<<<<<<<<<<<
@@ -4153,7 +4151,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
   if (__pyx_t_2) {
 
 
-    /* "_win_console.pyx":254
+    /* "_win_console.pyx":295
  *     cdef BOOL has_self_session = ProcessIdToSessionId(GetCurrentProcessId(), &self_session)
  *     if same_session_only and not has_self_session:
  *         PyMem_Free(lock_path_w)             # <<<<<<<<<<<<<<
@@ -4162,7 +4160,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
     PyMem_Free(__pyx_v_lock_path_w);
 
-    /* "_win_console.pyx":255
+    /* "_win_console.pyx":296
  *     if same_session_only and not has_self_session:
  *         PyMem_Free(lock_path_w)
  *         return None             # <<<<<<<<<<<<<<
@@ -4179,7 +4177,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     }
     goto __pyx_L0;
 
-    /* "_win_console.pyx":253
+    /* "_win_console.pyx":294
  *     cdef DWORD self_session = 0
  *     cdef BOOL has_self_session = ProcessIdToSessionId(GetCurrentProcessId(), &self_session)
  *     if same_session_only and not has_self_session:             # <<<<<<<<<<<<<<
@@ -4188,7 +4186,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   }
 
-  /* "_win_console.pyx":257
+  /* "_win_console.pyx":298
  *         return None
  * 
  *     cdef DWORD cand_pid = 0             # <<<<<<<<<<<<<<
@@ -4197,7 +4195,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_cand_pid = 0;
 
-  /* "_win_console.pyx":258
+  /* "_win_console.pyx":299
  * 
  *     cdef DWORD cand_pid = 0
  *     cdef uint64_t cand_ft = 0             # <<<<<<<<<<<<<<
@@ -4206,7 +4204,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_cand_ft = 0;
 
-  /* "_win_console.pyx":259
+  /* "_win_console.pyx":300
  *     cdef DWORD cand_pid = 0
  *     cdef uint64_t cand_ft = 0
  *     cdef uint64_t actual_ft = 0             # <<<<<<<<<<<<<<
@@ -4215,7 +4213,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_actual_ft = 0;
 
-  /* "_win_console.pyx":260
+  /* "_win_console.pyx":301
  *     cdef uint64_t cand_ft = 0
  *     cdef uint64_t actual_ft = 0
  *     cdef HANDLE h_proc = NULL             # <<<<<<<<<<<<<<
@@ -4224,7 +4222,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_h_proc = NULL;
 
-  /* "_win_console.pyx":263
+  /* "_win_console.pyx":304
  *     cdef FILETIME c_ft, e_ft, k_ft, u_ft
  *     cdef WCHAR exe_buf[1024]
  *     cdef DWORD exe_len = 1024             # <<<<<<<<<<<<<<
@@ -4233,19 +4231,19 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_exe_len = 0x400;
 
-  /* "_win_console.pyx":265
+  /* "_win_console.pyx":306
  *     cdef DWORD exe_len = 1024
  * 
  *     verified = {}             # <<<<<<<<<<<<<<
  * 
  *     res = RmStartSession(&session, 0, session_key)
 */
-  __pyx_t_3 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 265, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 306, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
   __pyx_v_verified = ((PyObject*)__pyx_t_3);
   __pyx_t_3 = 0;
 
-  /* "_win_console.pyx":267
+  /* "_win_console.pyx":308
  *     verified = {}
  * 
  *     res = RmStartSession(&session, 0, session_key)             # <<<<<<<<<<<<<<
@@ -4254,7 +4252,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   __pyx_v_res = RmStartSession((&__pyx_v_session), 0, __pyx_v_session_key);
 
-  /* "_win_console.pyx":268
+  /* "_win_console.pyx":309
  * 
  *     res = RmStartSession(&session, 0, session_key)
  *     if res != 0:             # <<<<<<<<<<<<<<
@@ -4266,7 +4264,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
   if (__pyx_t_2) {
 
 
-    /* "_win_console.pyx":269
+    /* "_win_console.pyx":310
  *     res = RmStartSession(&session, 0, session_key)
  *     if res != 0:
  *         PyMem_Free(lock_path_w)             # <<<<<<<<<<<<<<
@@ -4275,7 +4273,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
     PyMem_Free(__pyx_v_lock_path_w);
 
-    /* "_win_console.pyx":270
+    /* "_win_console.pyx":311
  *     if res != 0:
  *         PyMem_Free(lock_path_w)
  *         return None             # <<<<<<<<<<<<<<
@@ -4292,7 +4290,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     }
     goto __pyx_L0;
 
-    /* "_win_console.pyx":268
+    /* "_win_console.pyx":309
  * 
  *     res = RmStartSession(&session, 0, session_key)
  *     if res != 0:             # <<<<<<<<<<<<<<
@@ -4301,7 +4299,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   }
 
-  /* "_win_console.pyx":272
+  /* "_win_console.pyx":313
  *         return None
  * 
  *     try:             # <<<<<<<<<<<<<<
@@ -4310,7 +4308,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
   /*try:*/ {
 
-    /* "_win_console.pyx":273
+    /* "_win_console.pyx":314
  * 
  *     try:
  *         if RmRegisterResources(session, 1, resources, 0, NULL, 0, NULL) != 0:             # <<<<<<<<<<<<<<
@@ -4322,7 +4320,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     if (__pyx_t_2) {
 
 
-      /* "_win_console.pyx":274
+      /* "_win_console.pyx":315
  *     try:
  *         if RmRegisterResources(session, 1, resources, 0, NULL, 0, NULL) != 0:
  *             return None             # <<<<<<<<<<<<<<
@@ -4339,7 +4337,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
       }
       goto __pyx_L12_return;
 
-      /* "_win_console.pyx":273
+      /* "_win_console.pyx":314
  * 
  *     try:
  *         if RmRegisterResources(session, 1, resources, 0, NULL, 0, NULL) != 0:             # <<<<<<<<<<<<<<
@@ -4348,7 +4346,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
     }
 
-    /* "_win_console.pyx":276
+    /* "_win_console.pyx":317
  *             return None
  * 
  *         res = RmGetList(session, &needed, &count, NULL, &reason)             # <<<<<<<<<<<<<<
@@ -4357,7 +4355,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
     __pyx_v_res = RmGetList(__pyx_v_session, (&__pyx_v_needed), (&__pyx_v_count), NULL, (&__pyx_v_reason));
 
-    /* "_win_console.pyx":277
+    /* "_win_console.pyx":318
  * 
  *         res = RmGetList(session, &needed, &count, NULL, &reason)
  *         if needed == 0 or (res != 0 and res != ERROR_MORE_DATA):             # <<<<<<<<<<<<<<
@@ -4393,7 +4391,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     if (__pyx_t_2) {
 
 
-      /* "_win_console.pyx":278
+      /* "_win_console.pyx":319
  *         res = RmGetList(session, &needed, &count, NULL, &reason)
  *         if needed == 0 or (res != 0 and res != ERROR_MORE_DATA):
  *             return None             # <<<<<<<<<<<<<<
@@ -4410,7 +4408,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
       }
       goto __pyx_L12_return;
 
-      /* "_win_console.pyx":277
+      /* "_win_console.pyx":318
  * 
  *         res = RmGetList(session, &needed, &count, NULL, &reason)
  *         if needed == 0 or (res != 0 and res != ERROR_MORE_DATA):             # <<<<<<<<<<<<<<
@@ -4419,7 +4417,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
     }
 
-    /* "_win_console.pyx":280
+    /* "_win_console.pyx":321
  *             return None
  * 
  *         for retry in range(3):             # <<<<<<<<<<<<<<
@@ -4429,7 +4427,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     for (__pyx_t_8 = 0; __pyx_t_8 < 3; __pyx_t_8+=1) {
       __pyx_v_retry = __pyx_t_8;
 
-      /* "_win_console.pyx":281
+      /* "_win_console.pyx":322
  * 
  *         for retry in range(3):
  *             if needed == 0 or needed > 256:             # <<<<<<<<<<<<<<
@@ -4455,7 +4453,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
       if (__pyx_t_2) {
 
 
-        /* "_win_console.pyx":282
+        /* "_win_console.pyx":323
  *         for retry in range(3):
  *             if needed == 0 or needed > 256:
  *                 return None             # <<<<<<<<<<<<<<
@@ -4472,7 +4470,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
         }
         goto __pyx_L12_return;
 
-        /* "_win_console.pyx":281
+        /* "_win_console.pyx":322
  * 
  *         for retry in range(3):
  *             if needed == 0 or needed > 256:             # <<<<<<<<<<<<<<
@@ -4481,7 +4479,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       }
 
-      /* "_win_console.pyx":283
+      /* "_win_console.pyx":324
  *             if needed == 0 or needed > 256:
  *                 return None
  *             if process_infos != NULL:             # <<<<<<<<<<<<<<
@@ -4493,7 +4491,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
       if (__pyx_t_2) {
 
 
-        /* "_win_console.pyx":284
+        /* "_win_console.pyx":325
  *                 return None
  *             if process_infos != NULL:
  *                 free(process_infos)             # <<<<<<<<<<<<<<
@@ -4502,7 +4500,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
         free(__pyx_v_process_infos);
 
-        /* "_win_console.pyx":285
+        /* "_win_console.pyx":326
  *             if process_infos != NULL:
  *                 free(process_infos)
  *                 process_infos = NULL             # <<<<<<<<<<<<<<
@@ -4511,7 +4509,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
         __pyx_v_process_infos = NULL;
 
-        /* "_win_console.pyx":283
+        /* "_win_console.pyx":324
  *             if needed == 0 or needed > 256:
  *                 return None
  *             if process_infos != NULL:             # <<<<<<<<<<<<<<
@@ -4520,7 +4518,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       }
 
-      /* "_win_console.pyx":286
+      /* "_win_console.pyx":327
  *                 free(process_infos)
  *                 process_infos = NULL
  *             process_infos = <RM_PROCESS_INFO*>malloc(sizeof(RM_PROCESS_INFO) * needed)             # <<<<<<<<<<<<<<
@@ -4529,7 +4527,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       __pyx_v_process_infos = ((RM_PROCESS_INFO *)malloc(((sizeof(RM_PROCESS_INFO)) * __pyx_v_needed)));
 
-      /* "_win_console.pyx":287
+      /* "_win_console.pyx":328
  *                 process_infos = NULL
  *             process_infos = <RM_PROCESS_INFO*>malloc(sizeof(RM_PROCESS_INFO) * needed)
  *             if process_infos == NULL:             # <<<<<<<<<<<<<<
@@ -4541,7 +4539,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
       if (__pyx_t_2) {
 
 
-        /* "_win_console.pyx":288
+        /* "_win_console.pyx":329
  *             process_infos = <RM_PROCESS_INFO*>malloc(sizeof(RM_PROCESS_INFO) * needed)
  *             if process_infos == NULL:
  *                 return None             # <<<<<<<<<<<<<<
@@ -4558,7 +4556,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
         }
         goto __pyx_L12_return;
 
-        /* "_win_console.pyx":287
+        /* "_win_console.pyx":328
  *                 process_infos = NULL
  *             process_infos = <RM_PROCESS_INFO*>malloc(sizeof(RM_PROCESS_INFO) * needed)
  *             if process_infos == NULL:             # <<<<<<<<<<<<<<
@@ -4567,7 +4565,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       }
 
-      /* "_win_console.pyx":289
+      /* "_win_console.pyx":330
  *             if process_infos == NULL:
  *                 return None
  *             count = needed             # <<<<<<<<<<<<<<
@@ -4576,7 +4574,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       __pyx_v_count = __pyx_v_needed;
 
-      /* "_win_console.pyx":290
+      /* "_win_console.pyx":331
  *                 return None
  *             count = needed
  *             res = RmGetList(session, &needed, &count, process_infos, &reason)             # <<<<<<<<<<<<<<
@@ -4585,7 +4583,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       __pyx_v_res = RmGetList(__pyx_v_session, (&__pyx_v_needed), (&__pyx_v_count), __pyx_v_process_infos, (&__pyx_v_reason));
 
-      /* "_win_console.pyx":291
+      /* "_win_console.pyx":332
  *             count = needed
  *             res = RmGetList(session, &needed, &count, process_infos, &reason)
  *             if res == 0:             # <<<<<<<<<<<<<<
@@ -4597,7 +4595,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
       if (__pyx_t_2) {
 
 
-        /* "_win_console.pyx":292
+        /* "_win_console.pyx":333
  *             res = RmGetList(session, &needed, &count, process_infos, &reason)
  *             if res == 0:
  *                 break             # <<<<<<<<<<<<<<
@@ -4606,7 +4604,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
         goto __pyx_L21_break;
 
-        /* "_win_console.pyx":291
+        /* "_win_console.pyx":332
  *             count = needed
  *             res = RmGetList(session, &needed, &count, process_infos, &reason)
  *             if res == 0:             # <<<<<<<<<<<<<<
@@ -4615,7 +4613,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       }
 
-      /* "_win_console.pyx":293
+      /* "_win_console.pyx":334
  *             if res == 0:
  *                 break
  *             if res != ERROR_MORE_DATA:             # <<<<<<<<<<<<<<
@@ -4627,7 +4625,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
       if (__pyx_t_2) {
 
 
-        /* "_win_console.pyx":294
+        /* "_win_console.pyx":335
  *                 break
  *             if res != ERROR_MORE_DATA:
  *                 return None             # <<<<<<<<<<<<<<
@@ -4644,7 +4642,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
         }
         goto __pyx_L12_return;
 
-        /* "_win_console.pyx":293
+        /* "_win_console.pyx":334
  *             if res == 0:
  *                 break
  *             if res != ERROR_MORE_DATA:             # <<<<<<<<<<<<<<
@@ -4655,7 +4653,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     }
     /*else*/ {
 
-      /* "_win_console.pyx":296
+      /* "_win_console.pyx":337
  *                 return None
  *         else:
  *             return None             # <<<<<<<<<<<<<<
@@ -4674,7 +4672,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     }
     __pyx_L21_break:;
 
-    /* "_win_console.pyx":298
+    /* "_win_console.pyx":339
  *             return None
  * 
  *         for i in range(count):             # <<<<<<<<<<<<<<
@@ -4688,7 +4686,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     for (__pyx_t_11 = 0; __pyx_t_11 < __pyx_t_10; __pyx_t_11+=1) {
       __pyx_v_i = __pyx_t_11;
 
-      /* "_win_console.pyx":299
+      /* "_win_console.pyx":340
  * 
  *         for i in range(count):
  *             cand_pid = process_infos[i].Process.dwProcessId             # <<<<<<<<<<<<<<
@@ -4699,7 +4697,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 
       __pyx_v_cand_pid = __pyx_t_12;
 
-      /* "_win_console.pyx":300
+      /* "_win_console.pyx":341
  *         for i in range(count):
  *             cand_pid = process_infos[i].Process.dwProcessId
  *             cand_ft = _ft_to_u64(process_infos[i].Process.ProcessStartTime)             # <<<<<<<<<<<<<<
@@ -4708,7 +4706,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       __pyx_v_cand_ft = __pyx_f_12_win_console__ft_to_u64((__pyx_v_process_infos[__pyx_v_i]).Process.ProcessStartTime);
 
-      /* "_win_console.pyx":301
+      /* "_win_console.pyx":342
  *             cand_pid = process_infos[i].Process.dwProcessId
  *             cand_ft = _ft_to_u64(process_infos[i].Process.ProcessStartTime)
  *             if cand_pid == 0 or cand_ft == 0:             # <<<<<<<<<<<<<<
@@ -4734,7 +4732,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
       if (__pyx_t_2) {
 
 
-        /* "_win_console.pyx":302
+        /* "_win_console.pyx":343
  *             cand_ft = _ft_to_u64(process_infos[i].Process.ProcessStartTime)
  *             if cand_pid == 0 or cand_ft == 0:
  *                 continue             # <<<<<<<<<<<<<<
@@ -4743,7 +4741,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
         goto __pyx_L29_continue;
 
-        /* "_win_console.pyx":301
+        /* "_win_console.pyx":342
  *             cand_pid = process_infos[i].Process.dwProcessId
  *             cand_ft = _ft_to_u64(process_infos[i].Process.ProcessStartTime)
  *             if cand_pid == 0 or cand_ft == 0:             # <<<<<<<<<<<<<<
@@ -4752,7 +4750,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       }
 
-      /* "_win_console.pyx":303
+      /* "_win_console.pyx":344
  *             if cand_pid == 0 or cand_ft == 0:
  *                 continue
  *             if same_session_only and process_infos[i].TSSessionId != self_session:             # <<<<<<<<<<<<<<
@@ -4774,7 +4772,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
       if (__pyx_t_2) {
 
 
-        /* "_win_console.pyx":304
+        /* "_win_console.pyx":345
  *                 continue
  *             if same_session_only and process_infos[i].TSSessionId != self_session:
  *                 continue             # <<<<<<<<<<<<<<
@@ -4783,7 +4781,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
         goto __pyx_L29_continue;
 
-        /* "_win_console.pyx":303
+        /* "_win_console.pyx":344
  *             if cand_pid == 0 or cand_ft == 0:
  *                 continue
  *             if same_session_only and process_infos[i].TSSessionId != self_session:             # <<<<<<<<<<<<<<
@@ -4792,7 +4790,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       }
 
-      /* "_win_console.pyx":306
+      /* "_win_console.pyx":347
  *                 continue
  * 
  *             h_proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, cand_pid)             # <<<<<<<<<<<<<<
@@ -4801,7 +4799,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       __pyx_v_h_proc = OpenProcess((PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE), 0, __pyx_v_cand_pid);
 
-      /* "_win_console.pyx":307
+      /* "_win_console.pyx":348
  * 
  *             h_proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, cand_pid)
  *             if h_proc == NULL or h_proc == INVALID_HANDLE_VALUE:             # <<<<<<<<<<<<<<
@@ -4827,7 +4825,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
       if (__pyx_t_2) {
 
 
-        /* "_win_console.pyx":308
+        /* "_win_console.pyx":349
  *             h_proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, cand_pid)
  *             if h_proc == NULL or h_proc == INVALID_HANDLE_VALUE:
  *                 continue             # <<<<<<<<<<<<<<
@@ -4836,7 +4834,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
         goto __pyx_L29_continue;
 
-        /* "_win_console.pyx":307
+        /* "_win_console.pyx":348
  * 
  *             h_proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, cand_pid)
  *             if h_proc == NULL or h_proc == INVALID_HANDLE_VALUE:             # <<<<<<<<<<<<<<
@@ -4845,7 +4843,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       }
 
-      /* "_win_console.pyx":309
+      /* "_win_console.pyx":350
  *             if h_proc == NULL or h_proc == INVALID_HANDLE_VALUE:
  *                 continue
  *             try:             # <<<<<<<<<<<<<<
@@ -4854,7 +4852,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       /*try:*/ {
 
-        /* "_win_console.pyx":310
+        /* "_win_console.pyx":351
  *                 continue
  *             try:
  *                 if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:             # <<<<<<<<<<<<<<
@@ -4866,7 +4864,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
         if (__pyx_t_2) {
 
 
-          /* "_win_console.pyx":311
+          /* "_win_console.pyx":352
  *             try:
  *                 if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
  *                     continue             # <<<<<<<<<<<<<<
@@ -4875,7 +4873,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
           goto __pyx_L40_continue;
 
-          /* "_win_console.pyx":310
+          /* "_win_console.pyx":351
  *                 continue
  *             try:
  *                 if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:             # <<<<<<<<<<<<<<
@@ -4884,7 +4882,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
         }
 
-        /* "_win_console.pyx":312
+        /* "_win_console.pyx":353
  *                 if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
  *                     continue
  *                 if not GetProcessTimes(h_proc, &c_ft, &e_ft, &k_ft, &u_ft):             # <<<<<<<<<<<<<<
@@ -4896,7 +4894,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
         if (__pyx_t_2) {
 
 
-          /* "_win_console.pyx":313
+          /* "_win_console.pyx":354
  *                     continue
  *                 if not GetProcessTimes(h_proc, &c_ft, &e_ft, &k_ft, &u_ft):
  *                     continue             # <<<<<<<<<<<<<<
@@ -4905,7 +4903,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
           goto __pyx_L40_continue;
 
-          /* "_win_console.pyx":312
+          /* "_win_console.pyx":353
  *                 if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
  *                     continue
  *                 if not GetProcessTimes(h_proc, &c_ft, &e_ft, &k_ft, &u_ft):             # <<<<<<<<<<<<<<
@@ -4914,7 +4912,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
         }
 
-        /* "_win_console.pyx":314
+        /* "_win_console.pyx":355
  *                 if not GetProcessTimes(h_proc, &c_ft, &e_ft, &k_ft, &u_ft):
  *                     continue
  *                 actual_ft = _ft_to_u64(c_ft)             # <<<<<<<<<<<<<<
@@ -4923,7 +4921,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
         __pyx_v_actual_ft = __pyx_f_12_win_console__ft_to_u64(__pyx_v_c_ft);
 
-        /* "_win_console.pyx":315
+        /* "_win_console.pyx":356
  *                     continue
  *                 actual_ft = _ft_to_u64(c_ft)
  *                 if actual_ft == 0 or actual_ft != cand_ft:             # <<<<<<<<<<<<<<
@@ -4949,7 +4947,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
         if (__pyx_t_2) {
 
 
-          /* "_win_console.pyx":316
+          /* "_win_console.pyx":357
  *                 actual_ft = _ft_to_u64(c_ft)
  *                 if actual_ft == 0 or actual_ft != cand_ft:
  *                     continue             # <<<<<<<<<<<<<<
@@ -4958,7 +4956,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
           goto __pyx_L40_continue;
 
-          /* "_win_console.pyx":315
+          /* "_win_console.pyx":356
  *                     continue
  *                 actual_ft = _ft_to_u64(c_ft)
  *                 if actual_ft == 0 or actual_ft != cand_ft:             # <<<<<<<<<<<<<<
@@ -4967,7 +4965,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
         }
 
-        /* "_win_console.pyx":318
+        /* "_win_console.pyx":359
  *                     continue
  * 
  *                 if allowed_set is not None:             # <<<<<<<<<<<<<<
@@ -4978,7 +4976,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
         if (__pyx_t_2) {
 
 
-          /* "_win_console.pyx":319
+          /* "_win_console.pyx":360
  * 
  *                 if allowed_set is not None:
  *                     exe_len = 1024             # <<<<<<<<<<<<<<
@@ -4987,7 +4985,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
           __pyx_v_exe_len = 0x400;
 
-          /* "_win_console.pyx":320
+          /* "_win_console.pyx":361
  *                 if allowed_set is not None:
  *                     exe_len = 1024
  *                     if not QueryFullProcessImageNameW(h_proc, 0, exe_buf, &exe_len):             # <<<<<<<<<<<<<<
@@ -4999,7 +4997,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
           if (__pyx_t_2) {
 
 
-            /* "_win_console.pyx":321
+            /* "_win_console.pyx":362
  *                     exe_len = 1024
  *                     if not QueryFullProcessImageNameW(h_proc, 0, exe_buf, &exe_len):
  *                         continue             # <<<<<<<<<<<<<<
@@ -5008,7 +5006,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
             goto __pyx_L40_continue;
 
-            /* "_win_console.pyx":320
+            /* "_win_console.pyx":361
  *                 if allowed_set is not None:
  *                     exe_len = 1024
  *                     if not QueryFullProcessImageNameW(h_proc, 0, exe_buf, &exe_len):             # <<<<<<<<<<<<<<
@@ -5017,28 +5015,28 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
           }
 
-          /* "_win_console.pyx":322
+          /* "_win_console.pyx":363
  *                     if not QueryFullProcessImageNameW(h_proc, 0, exe_buf, &exe_len):
  *                         continue
  *                     exe_path = PyUnicode_FromWideChar(exe_buf, <Py_ssize_t>exe_len)             # <<<<<<<<<<<<<<
  *                     if os.path.basename(exe_path).lower() not in allowed_set:
  *                         continue
 */
-          __pyx_t_3 = PyUnicode_FromWideChar(__pyx_v_exe_buf, ((Py_ssize_t)__pyx_v_exe_len)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 322, __pyx_L43_error)
+          __pyx_t_3 = PyUnicode_FromWideChar(__pyx_v_exe_buf, ((Py_ssize_t)__pyx_v_exe_len)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 363, __pyx_L43_error)
           __Pyx_GOTREF(__pyx_t_3);
           __Pyx_XDECREF_SET(__pyx_v_exe_path, __pyx_t_3);
           __pyx_t_3 = 0;
 
-          /* "_win_console.pyx":323
+          /* "_win_console.pyx":364
  *                         continue
  *                     exe_path = PyUnicode_FromWideChar(exe_buf, <Py_ssize_t>exe_len)
  *                     if os.path.basename(exe_path).lower() not in allowed_set:             # <<<<<<<<<<<<<<
  *                         continue
  * 
 */
-          __Pyx_GetModuleGlobalName(__pyx_t_14, __pyx_mstate_global->__pyx_n_u_os); if (unlikely(!__pyx_t_14)) __PYX_ERR(0, 323, __pyx_L43_error)
+          __Pyx_GetModuleGlobalName(__pyx_t_14, __pyx_mstate_global->__pyx_n_u_os); if (unlikely(!__pyx_t_14)) __PYX_ERR(0, 364, __pyx_L43_error)
           __Pyx_GOTREF(__pyx_t_14);
-          __pyx_t_15 = __Pyx_PyObject_GetAttrStr(__pyx_t_14, __pyx_mstate_global->__pyx_n_u_path); if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 323, __pyx_L43_error)
+          __pyx_t_15 = __Pyx_PyObject_GetAttrStr(__pyx_t_14, __pyx_mstate_global->__pyx_n_u_path); if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 364, __pyx_L43_error)
           __Pyx_GOTREF(__pyx_t_15);
           __Pyx_DECREF(__pyx_t_14); __pyx_t_14 = 0;
           __pyx_t_13 = __pyx_t_15;
@@ -5049,7 +5047,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
             __pyx_t_4 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_basename, __pyx_callargs+__pyx_t_6, (2-__pyx_t_6) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
             __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
             __Pyx_DECREF(__pyx_t_15); __pyx_t_15 = 0;
-            if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 323, __pyx_L43_error)
+            if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 364, __pyx_L43_error)
             __Pyx_GOTREF(__pyx_t_4);
           }
           __pyx_t_5 = __pyx_t_4;
@@ -5060,15 +5058,15 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
             __pyx_t_3 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_lower, __pyx_callargs+__pyx_t_6, (1-__pyx_t_6) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
             __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
             __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-            if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 323, __pyx_L43_error)
+            if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 364, __pyx_L43_error)
             __Pyx_GOTREF(__pyx_t_3);
           }
-          __pyx_t_2 = (__Pyx_PySequence_ContainsTF(__pyx_t_3, __pyx_v_allowed_set, Py_NE)); if (unlikely((__pyx_t_2 < 0))) __PYX_ERR(0, 323, __pyx_L43_error)
+          __pyx_t_2 = (__Pyx_PySequence_ContainsTF(__pyx_t_3, __pyx_v_allowed_set, Py_NE)); if (unlikely((__pyx_t_2 < 0))) __PYX_ERR(0, 364, __pyx_L43_error)
           __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
           if (__pyx_t_2) {
 
 
-            /* "_win_console.pyx":324
+            /* "_win_console.pyx":365
  *                     exe_path = PyUnicode_FromWideChar(exe_buf, <Py_ssize_t>exe_len)
  *                     if os.path.basename(exe_path).lower() not in allowed_set:
  *                         continue             # <<<<<<<<<<<<<<
@@ -5077,7 +5075,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
             goto __pyx_L40_continue;
 
-            /* "_win_console.pyx":323
+            /* "_win_console.pyx":364
  *                         continue
  *                     exe_path = PyUnicode_FromWideChar(exe_buf, <Py_ssize_t>exe_len)
  *                     if os.path.basename(exe_path).lower() not in allowed_set:             # <<<<<<<<<<<<<<
@@ -5086,7 +5084,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
           }
 
-          /* "_win_console.pyx":318
+          /* "_win_console.pyx":359
  *                     continue
  * 
  *                 if allowed_set is not None:             # <<<<<<<<<<<<<<
@@ -5095,26 +5093,26 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
         }
 
-        /* "_win_console.pyx":326
+        /* "_win_console.pyx":367
  *                         continue
  * 
  *                 verified[<int>cand_pid] = <object>actual_ft             # <<<<<<<<<<<<<<
  *             finally:
  *                 CloseHandle(h_proc)
 */
-        __pyx_t_3 = __Pyx_PyLong_From_uint64_t(__pyx_v_actual_ft); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 326, __pyx_L43_error)
+        __pyx_t_3 = __Pyx_PyLong_From_uint64_t(__pyx_v_actual_ft); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 367, __pyx_L43_error)
         __Pyx_GOTREF(__pyx_t_3);
         __pyx_t_4 = __pyx_t_3;
         __Pyx_INCREF(__pyx_t_4);
         __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-        __pyx_t_3 = __Pyx_PyLong_From_int(((int)__pyx_v_cand_pid)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 326, __pyx_L43_error)
+        __pyx_t_3 = __Pyx_PyLong_From_int(((int)__pyx_v_cand_pid)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 367, __pyx_L43_error)
         __Pyx_GOTREF(__pyx_t_3);
-        if (unlikely((PyDict_SetItem(__pyx_v_verified, __pyx_t_3, __pyx_t_4) < 0))) __PYX_ERR(0, 326, __pyx_L43_error)
+        if (unlikely((PyDict_SetItem(__pyx_v_verified, __pyx_t_3, __pyx_t_4) < 0))) __PYX_ERR(0, 367, __pyx_L43_error)
         __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
         __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
       }
 
-      /* "_win_console.pyx":328
+      /* "_win_console.pyx":369
  *                 verified[<int>cand_pid] = <object>actual_ft
  *             finally:
  *                 CloseHandle(h_proc)             # <<<<<<<<<<<<<<
@@ -5171,21 +5169,21 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     }
 
 
-    /* "_win_console.pyx":330
+    /* "_win_console.pyx":371
  *                 CloseHandle(h_proc)
  * 
  *         if len(verified) != 1:             # <<<<<<<<<<<<<<
  *             return None
  *         return next(iter(verified.items()))
 */
-    __pyx_t_7 = PyDict_Size(__pyx_v_verified); if (unlikely(__pyx_t_7 == ((Py_ssize_t)-1))) __PYX_ERR(0, 330, __pyx_L13_error)
+    __pyx_t_7 = PyDict_Size(__pyx_v_verified); if (unlikely(__pyx_t_7 == ((Py_ssize_t)-1))) __PYX_ERR(0, 371, __pyx_L13_error)
     __pyx_t_2 = (__pyx_t_7 != 1);
 
 
     if (__pyx_t_2) {
 
 
-      /* "_win_console.pyx":331
+      /* "_win_console.pyx":372
  * 
  *         if len(verified) != 1:
  *             return None             # <<<<<<<<<<<<<<
@@ -5202,7 +5200,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
       }
       goto __pyx_L12_return;
 
-      /* "_win_console.pyx":330
+      /* "_win_console.pyx":371
  *                 CloseHandle(h_proc)
  * 
  *         if len(verified) != 1:             # <<<<<<<<<<<<<<
@@ -5211,19 +5209,19 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
     }
 
-    /* "_win_console.pyx":332
+    /* "_win_console.pyx":373
  *         if len(verified) != 1:
  *             return None
  *         return next(iter(verified.items()))             # <<<<<<<<<<<<<<
  *     finally:
  *         if process_infos != NULL:
 */
-    __pyx_t_4 = __Pyx_PyDict_Items(__pyx_v_verified); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 332, __pyx_L13_error)
+    __pyx_t_4 = __Pyx_PyDict_Items(__pyx_v_verified); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 373, __pyx_L13_error)
     __Pyx_GOTREF(__pyx_t_4);
-    __pyx_t_3 = PyObject_GetIter(__pyx_t_4); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 332, __pyx_L13_error)
+    __pyx_t_3 = PyObject_GetIter(__pyx_t_4); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 373, __pyx_L13_error)
     __Pyx_GOTREF(__pyx_t_3);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-    __pyx_t_4 = __Pyx_PyIter_Next(__pyx_t_3); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 332, __pyx_L13_error)
+    __pyx_t_4 = __Pyx_PyIter_Next(__pyx_t_3); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 373, __pyx_L13_error)
     __Pyx_GOTREF(__pyx_t_4);
     __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
     {
@@ -5238,7 +5236,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     goto __pyx_L12_return;
   }
 
-  /* "_win_console.pyx":334
+  /* "_win_console.pyx":375
  *         return next(iter(verified.items()))
  *     finally:
  *         if process_infos != NULL:             # <<<<<<<<<<<<<<
@@ -5272,7 +5270,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
         if (__pyx_t_2) {
 
 
-          /* "_win_console.pyx":335
+          /* "_win_console.pyx":376
  *     finally:
  *         if process_infos != NULL:
  *             free(process_infos)             # <<<<<<<<<<<<<<
@@ -5281,7 +5279,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
           free(__pyx_v_process_infos);
 
-          /* "_win_console.pyx":334
+          /* "_win_console.pyx":375
  *         return next(iter(verified.items()))
  *     finally:
  *         if process_infos != NULL:             # <<<<<<<<<<<<<<
@@ -5290,7 +5288,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
         }
 
-        /* "_win_console.pyx":336
+        /* "_win_console.pyx":377
  *         if process_infos != NULL:
  *             free(process_infos)
  *         RmEndSession(session)             # <<<<<<<<<<<<<<
@@ -5299,7 +5297,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
         (void)(RmEndSession(__pyx_v_session));
 
-        /* "_win_console.pyx":337
+        /* "_win_console.pyx":378
  *             free(process_infos)
  *         RmEndSession(session)
  *         PyMem_Free(lock_path_w)             # <<<<<<<<<<<<<<
@@ -5324,7 +5322,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
       __pyx_t_18 = __pyx_r;
       __pyx_r = 0;
 
-      /* "_win_console.pyx":334
+      /* "_win_console.pyx":375
  *         return next(iter(verified.items()))
  *     finally:
  *         if process_infos != NULL:             # <<<<<<<<<<<<<<
@@ -5336,7 +5334,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
       if (__pyx_t_2) {
 
 
-        /* "_win_console.pyx":335
+        /* "_win_console.pyx":376
  *     finally:
  *         if process_infos != NULL:
  *             free(process_infos)             # <<<<<<<<<<<<<<
@@ -5345,7 +5343,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
         free(__pyx_v_process_infos);
 
-        /* "_win_console.pyx":334
+        /* "_win_console.pyx":375
  *         return next(iter(verified.items()))
  *     finally:
  *         if process_infos != NULL:             # <<<<<<<<<<<<<<
@@ -5354,7 +5352,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       }
 
-      /* "_win_console.pyx":336
+      /* "_win_console.pyx":377
  *         if process_infos != NULL:
  *             free(process_infos)
  *         RmEndSession(session)             # <<<<<<<<<<<<<<
@@ -5363,7 +5361,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
 */
       (void)(RmEndSession(__pyx_v_session));
 
-      /* "_win_console.pyx":337
+      /* "_win_console.pyx":378
  *             free(process_infos)
  *         RmEndSession(session)
  *         PyMem_Free(lock_path_w)             # <<<<<<<<<<<<<<
@@ -5377,7 +5375,7 @@ static PyObject *__pyx_f_12_win_console_find_process_by_lock_path(PyObject *__py
     }
   }
 
-  /* "_win_console.pyx":215
+  /* "_win_console.pyx":256
  * # ============================================================================
  * 
  * cpdef object find_process_by_lock_path(             # <<<<<<<<<<<<<<
@@ -5470,28 +5468,28 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_lock_path,&__pyx_mstate_global->__pyx_n_u_allowed_images,&__pyx_mstate_global->__pyx_n_u_same_session_only,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len < 0)) __PYX_ERR(0, 215, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len < 0)) __PYX_ERR(0, 256, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 215, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 256, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 215, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 256, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 215, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 256, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "find_process_by_lock_path", 0) < (0)) __PYX_ERR(0, 215, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "find_process_by_lock_path", 0) < (0)) __PYX_ERR(0, 256, __pyx_L3_error)
 
-      /* "_win_console.pyx":217
+      /* "_win_console.pyx":258
  * cpdef object find_process_by_lock_path(
  *     str lock_path,
  *     object allowed_images = None,             # <<<<<<<<<<<<<<
@@ -5500,21 +5498,21 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 */
       if (!values[1]) values[1] = __Pyx_NewRef(((PyObject *)Py_None));
       for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("find_process_by_lock_path", 0, 1, 3, i); __PYX_ERR(0, 215, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("find_process_by_lock_path", 0, 1, 3, i); __PYX_ERR(0, 256, __pyx_L3_error) }
       }
     } else {
       switch (__pyx_nargs) {
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 215, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 256, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 215, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 256, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 215, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 256, __pyx_L3_error)
         break;
         default: goto __pyx_L5_argtuple_error;
       }
@@ -5523,10 +5521,10 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
     __pyx_v_lock_path = ((PyObject*)values[0]);
     __pyx_v_allowed_images = values[1];
     if (values[2]) {
-      __pyx_v_same_session_only = __Pyx_PyObject_IsTrue(values[2]); if (unlikely((__pyx_v_same_session_only == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 218, __pyx_L3_error)
+      __pyx_v_same_session_only = __Pyx_PyObject_IsTrue(values[2]); if (unlikely((__pyx_v_same_session_only == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 259, __pyx_L3_error)
     } else {
 
-      /* "_win_console.pyx":218
+      /* "_win_console.pyx":259
  *     str lock_path,
  *     object allowed_images = None,
  *     bint same_session_only = True,             # <<<<<<<<<<<<<<
@@ -5538,7 +5536,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("find_process_by_lock_path", 0, 1, 3, __pyx_nargs); __PYX_ERR(0, 215, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("find_process_by_lock_path", 0, 1, 3, __pyx_nargs); __PYX_ERR(0, 256, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -5549,10 +5547,10 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_lock_path), (&PyUnicode_Type), 1, "lock_path", 1))) __PYX_ERR(0, 216, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_lock_path), (&PyUnicode_Type), 1, "lock_path", 1))) __PYX_ERR(0, 257, __pyx_L1_error)
   __pyx_r = __pyx_pf_12_win_console_4find_process_by_lock_path(__pyx_self, __pyx_v_lock_path, __pyx_v_allowed_images, __pyx_v_same_session_only);
 
-  /* "_win_console.pyx":215
+  /* "_win_console.pyx":256
  * # ============================================================================
  * 
  * cpdef object find_process_by_lock_path(             # <<<<<<<<<<<<<<
@@ -5590,7 +5588,7 @@ static PyObject *__pyx_pf_12_win_console_4find_process_by_lock_path(CYTHON_UNUSE
   __pyx_t_2.__pyx_n = 2;
   __pyx_t_2.allowed_images = __pyx_v_allowed_images;
   __pyx_t_2.same_session_only = __pyx_v_same_session_only;
-  __pyx_t_1 = __pyx_f_12_win_console_find_process_by_lock_path(__pyx_v_lock_path, 1, &__pyx_t_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 215, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_12_win_console_find_process_by_lock_path(__pyx_v_lock_path, 1, &__pyx_t_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 256, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   {
     PyObject *__pyx_temp;
@@ -5614,7 +5612,7 @@ static PyObject *__pyx_pf_12_win_console_4find_process_by_lock_path(CYTHON_UNUSE
   return __pyx_r;
 }
 
-/* "_win_console.pyx":340
+/* "_win_console.pyx":381
  * 
  * 
  * cpdef object find_pid_by_lock_path(str lock_path, object allowed_images = None):             # <<<<<<<<<<<<<<
@@ -5647,7 +5645,7 @@ static PyObject *__pyx_f_12_win_console_find_pid_by_lock_path(PyObject *__pyx_v_
     }
   }
 
-  /* "_win_console.pyx":342
+  /* "_win_console.pyx":383
  * cpdef object find_pid_by_lock_path(str lock_path, object allowed_images = None):
  *     """: find_process_by_lock_path  PID (int) """
  *     identity = find_process_by_lock_path(lock_path, allowed_images=allowed_images)             # <<<<<<<<<<<<<<
@@ -5656,12 +5654,12 @@ static PyObject *__pyx_f_12_win_console_find_pid_by_lock_path(PyObject *__pyx_v_
 */
   __pyx_t_2.__pyx_n = 1;
   __pyx_t_2.allowed_images = __pyx_v_allowed_images;
-  __pyx_t_1 = __pyx_f_12_win_console_find_process_by_lock_path(__pyx_v_lock_path, 0, &__pyx_t_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 342, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_12_win_console_find_process_by_lock_path(__pyx_v_lock_path, 0, &__pyx_t_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 383, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_v_identity = __pyx_t_1;
   __pyx_t_1 = 0;
 
-  /* "_win_console.pyx":343
+  /* "_win_console.pyx":384
  *     """: find_process_by_lock_path  PID (int) """
  *     identity = find_process_by_lock_path(lock_path, allowed_images=allowed_images)
  *     if identity is None:             # <<<<<<<<<<<<<<
@@ -5672,7 +5670,7 @@ static PyObject *__pyx_f_12_win_console_find_pid_by_lock_path(PyObject *__pyx_v_
   if (__pyx_t_3) {
 
 
-    /* "_win_console.pyx":344
+    /* "_win_console.pyx":385
  *     identity = find_process_by_lock_path(lock_path, allowed_images=allowed_images)
  *     if identity is None:
  *         return None             # <<<<<<<<<<<<<<
@@ -5689,7 +5687,7 @@ static PyObject *__pyx_f_12_win_console_find_pid_by_lock_path(PyObject *__pyx_v_
     }
     goto __pyx_L0;
 
-    /* "_win_console.pyx":343
+    /* "_win_console.pyx":384
  *     """: find_process_by_lock_path  PID (int) """
  *     identity = find_process_by_lock_path(lock_path, allowed_images=allowed_images)
  *     if identity is None:             # <<<<<<<<<<<<<<
@@ -5698,14 +5696,14 @@ static PyObject *__pyx_f_12_win_console_find_pid_by_lock_path(PyObject *__pyx_v_
 */
   }
 
-  /* "_win_console.pyx":345
+  /* "_win_console.pyx":386
  *     if identity is None:
  *         return None
  *     return identity[0]             # <<<<<<<<<<<<<<
  * 
  * 
 */
-  __pyx_t_1 = __Pyx_GetItemInt(__pyx_v_identity, 0, long, 1, __Pyx_PyLong_From_long, 0, 0, 1, __Pyx_ReferenceSharing_OwnStrongReference); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 345, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_GetItemInt(__pyx_v_identity, 0, long, 1, __Pyx_PyLong_From_long, 0, 0, 1, __Pyx_ReferenceSharing_OwnStrongReference); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 386, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   {
     PyObject *__pyx_temp;
@@ -5718,7 +5716,7 @@ static PyObject *__pyx_f_12_win_console_find_pid_by_lock_path(PyObject *__pyx_v_
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "_win_console.pyx":340
+  /* "_win_console.pyx":381
  * 
  * 
  * cpdef object find_pid_by_lock_path(str lock_path, object allowed_images = None):             # <<<<<<<<<<<<<<
@@ -5779,35 +5777,35 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_lock_path,&__pyx_mstate_global->__pyx_n_u_allowed_images,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len < 0)) __PYX_ERR(0, 340, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len < 0)) __PYX_ERR(0, 381, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 340, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 381, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 340, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 381, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "find_pid_by_lock_path", 0) < (0)) __PYX_ERR(0, 340, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "find_pid_by_lock_path", 0) < (0)) __PYX_ERR(0, 381, __pyx_L3_error)
       if (!values[1]) values[1] = __Pyx_NewRef(((PyObject *)Py_None));
       for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("find_pid_by_lock_path", 0, 1, 2, i); __PYX_ERR(0, 340, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("find_pid_by_lock_path", 0, 1, 2, i); __PYX_ERR(0, 381, __pyx_L3_error) }
       }
     } else {
       switch (__pyx_nargs) {
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 340, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 381, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 340, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 381, __pyx_L3_error)
         break;
         default: goto __pyx_L5_argtuple_error;
       }
@@ -5818,7 +5816,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("find_pid_by_lock_path", 0, 1, 2, __pyx_nargs); __PYX_ERR(0, 340, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("find_pid_by_lock_path", 0, 1, 2, __pyx_nargs); __PYX_ERR(0, 381, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -5829,7 +5827,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_lock_path), (&PyUnicode_Type), 1, "lock_path", 1))) __PYX_ERR(0, 340, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_lock_path), (&PyUnicode_Type), 1, "lock_path", 1))) __PYX_ERR(0, 381, __pyx_L1_error)
   __pyx_r = __pyx_pf_12_win_console_6find_pid_by_lock_path(__pyx_self, __pyx_v_lock_path, __pyx_v_allowed_images);
 
   /* function exit code */
@@ -5860,7 +5858,7 @@ static PyObject *__pyx_pf_12_win_console_6find_pid_by_lock_path(CYTHON_UNUSED Py
   __Pyx_RefNannySetupContext("find_pid_by_lock_path", 0);
   __pyx_t_2.__pyx_n = 1;
   __pyx_t_2.allowed_images = __pyx_v_allowed_images;
-  __pyx_t_1 = __pyx_f_12_win_console_find_pid_by_lock_path(__pyx_v_lock_path, 1, &__pyx_t_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 340, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_12_win_console_find_pid_by_lock_path(__pyx_v_lock_path, 1, &__pyx_t_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 381, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   {
     PyObject *__pyx_temp;
@@ -5884,7 +5882,7 @@ static PyObject *__pyx_pf_12_win_console_6find_pid_by_lock_path(CYTHON_UNUSED Py
   return __pyx_r;
 }
 
-/* "_win_console.pyx":352
+/* "_win_console.pyx":393
  * # ============================================================================
  * 
  * cdef inline void _init_key_record(             # <<<<<<<<<<<<<<
@@ -5894,7 +5892,7 @@ static PyObject *__pyx_pf_12_win_console_6find_pid_by_lock_path(CYTHON_UNUSED Py
 
 static CYTHON_INLINE void __pyx_f_12_win_console__init_key_record(INPUT_RECORD *__pyx_v_rec, WCHAR __pyx_v_ch, WORD __pyx_v_vk_code, WORD __pyx_v_scan_code, BOOL __pyx_v_key_down) {
 
-  /* "_win_console.pyx":359
+  /* "_win_console.pyx":400
  *     BOOL key_down,
  * ) noexcept nogil:
  *     memset(rec, 0, sizeof(INPUT_RECORD))             # <<<<<<<<<<<<<<
@@ -5903,7 +5901,7 @@ static CYTHON_INLINE void __pyx_f_12_win_console__init_key_record(INPUT_RECORD *
 */
   (void)(memset(__pyx_v_rec, 0, (sizeof(INPUT_RECORD))));
 
-  /* "_win_console.pyx":360
+  /* "_win_console.pyx":401
  * ) noexcept nogil:
  *     memset(rec, 0, sizeof(INPUT_RECORD))
  *     rec.EventType = KEY_EVENT             # <<<<<<<<<<<<<<
@@ -5912,7 +5910,7 @@ static CYTHON_INLINE void __pyx_f_12_win_console__init_key_record(INPUT_RECORD *
 */
   __pyx_v_rec->EventType = KEY_EVENT;
 
-  /* "_win_console.pyx":361
+  /* "_win_console.pyx":402
  *     memset(rec, 0, sizeof(INPUT_RECORD))
  *     rec.EventType = KEY_EVENT
  *     rec.Event.KeyEvent.bKeyDown = key_down             # <<<<<<<<<<<<<<
@@ -5921,7 +5919,7 @@ static CYTHON_INLINE void __pyx_f_12_win_console__init_key_record(INPUT_RECORD *
 */
   __pyx_v_rec->Event.KeyEvent.bKeyDown = __pyx_v_key_down;
 
-  /* "_win_console.pyx":362
+  /* "_win_console.pyx":403
  *     rec.EventType = KEY_EVENT
  *     rec.Event.KeyEvent.bKeyDown = key_down
  *     rec.Event.KeyEvent.wRepeatCount = 1             # <<<<<<<<<<<<<<
@@ -5930,7 +5928,7 @@ static CYTHON_INLINE void __pyx_f_12_win_console__init_key_record(INPUT_RECORD *
 */
   __pyx_v_rec->Event.KeyEvent.wRepeatCount = 1;
 
-  /* "_win_console.pyx":363
+  /* "_win_console.pyx":404
  *     rec.Event.KeyEvent.bKeyDown = key_down
  *     rec.Event.KeyEvent.wRepeatCount = 1
  *     rec.Event.KeyEvent.wVirtualKeyCode = vk_code             # <<<<<<<<<<<<<<
@@ -5939,7 +5937,7 @@ static CYTHON_INLINE void __pyx_f_12_win_console__init_key_record(INPUT_RECORD *
 */
   __pyx_v_rec->Event.KeyEvent.wVirtualKeyCode = __pyx_v_vk_code;
 
-  /* "_win_console.pyx":364
+  /* "_win_console.pyx":405
  *     rec.Event.KeyEvent.wRepeatCount = 1
  *     rec.Event.KeyEvent.wVirtualKeyCode = vk_code
  *     rec.Event.KeyEvent.wVirtualScanCode = scan_code             # <<<<<<<<<<<<<<
@@ -5948,7 +5946,7 @@ static CYTHON_INLINE void __pyx_f_12_win_console__init_key_record(INPUT_RECORD *
 */
   __pyx_v_rec->Event.KeyEvent.wVirtualScanCode = __pyx_v_scan_code;
 
-  /* "_win_console.pyx":365
+  /* "_win_console.pyx":406
  *     rec.Event.KeyEvent.wVirtualKeyCode = vk_code
  *     rec.Event.KeyEvent.wVirtualScanCode = scan_code
  *     rec.Event.KeyEvent.uChar.UnicodeChar = ch             # <<<<<<<<<<<<<<
@@ -5957,7 +5955,7 @@ static CYTHON_INLINE void __pyx_f_12_win_console__init_key_record(INPUT_RECORD *
 */
   __pyx_v_rec->Event.KeyEvent.uChar.UnicodeChar = __pyx_v_ch;
 
-  /* "_win_console.pyx":366
+  /* "_win_console.pyx":407
  *     rec.Event.KeyEvent.wVirtualScanCode = scan_code
  *     rec.Event.KeyEvent.uChar.UnicodeChar = ch
  *     rec.Event.KeyEvent.dwControlKeyState = 0             # <<<<<<<<<<<<<<
@@ -5966,7 +5964,7 @@ static CYTHON_INLINE void __pyx_f_12_win_console__init_key_record(INPUT_RECORD *
 */
   __pyx_v_rec->Event.KeyEvent.dwControlKeyState = 0;
 
-  /* "_win_console.pyx":352
+  /* "_win_console.pyx":393
  * # ============================================================================
  * 
  * cdef inline void _init_key_record(             # <<<<<<<<<<<<<<
@@ -5977,7 +5975,1834 @@ static CYTHON_INLINE void __pyx_f_12_win_console__init_key_record(INPUT_RECORD *
   /* function exit code */
 }
 
-/* "_win_console.pyx":369
+/* "_win_console.pyx":410
+ * 
+ * 
+ * cdef inline bint _has_visible_w(const WCHAR* buf, DWORD length) noexcept nogil:             # <<<<<<<<<<<<<<
+ *     cdef DWORD i = 0
+ *     cdef unsigned int u = 0
+*/
+
+static CYTHON_INLINE int __pyx_f_12_win_console__has_visible_w(WCHAR const *__pyx_v_buf, DWORD __pyx_v_length) {
+  DWORD __pyx_v_i;
+  unsigned int __pyx_v_u;
+  int __pyx_r;
+  int __pyx_t_1;
+  int __pyx_t_2;
+
+  /* "_win_console.pyx":411
+ * 
+ * cdef inline bint _has_visible_w(const WCHAR* buf, DWORD length) noexcept nogil:
+ *     cdef DWORD i = 0             # <<<<<<<<<<<<<<
+ *     cdef unsigned int u = 0
+ *     if buf == NULL or length == 0:
+*/
+  __pyx_v_i = 0;
+
+  /* "_win_console.pyx":412
+ * cdef inline bint _has_visible_w(const WCHAR* buf, DWORD length) noexcept nogil:
+ *     cdef DWORD i = 0
+ *     cdef unsigned int u = 0             # <<<<<<<<<<<<<<
+ *     if buf == NULL or length == 0:
+ *         return 0
+*/
+  __pyx_v_u = 0;
+
+  /* "_win_console.pyx":413
+ *     cdef DWORD i = 0
+ *     cdef unsigned int u = 0
+ *     if buf == NULL or length == 0:             # <<<<<<<<<<<<<<
+ *         return 0
+ *     if <unsigned int>buf[0] == 0x3E:
+*/
+  __pyx_t_2 = (__pyx_v_buf == NULL);
+
+  if (!__pyx_t_2) {
+
+  } else {
+
+    __pyx_t_1 = __pyx_t_2;
+
+    goto __pyx_L4_bool_binop_done;
+  }
+  __pyx_t_2 = (__pyx_v_length == 0);
+
+
+  __pyx_t_1 = __pyx_t_2;
+
+  __pyx_L4_bool_binop_done:;
+  if (__pyx_t_1) {
+
+
+    /* "_win_console.pyx":414
+ *     cdef unsigned int u = 0
+ *     if buf == NULL or length == 0:
+ *         return 0             # <<<<<<<<<<<<<<
+ *     if <unsigned int>buf[0] == 0x3E:
+ *         i = 1
+*/
+    {
+
+      __pyx_r = 0;
+    }
+    goto __pyx_L0;
+
+    /* "_win_console.pyx":413
+ *     cdef DWORD i = 0
+ *     cdef unsigned int u = 0
+ *     if buf == NULL or length == 0:             # <<<<<<<<<<<<<<
+ *         return 0
+ *     if <unsigned int>buf[0] == 0x3E:
+*/
+  }
+
+  /* "_win_console.pyx":415
+ *     if buf == NULL or length == 0:
+ *         return 0
+ *     if <unsigned int>buf[0] == 0x3E:             # <<<<<<<<<<<<<<
+ *         i = 1
+ *         while i < length and <unsigned int>buf[i] == 0x20:
+*/
+  __pyx_t_1 = (((unsigned int)(__pyx_v_buf[0])) == 0x3E);
+
+  if (__pyx_t_1) {
+
+
+    /* "_win_console.pyx":416
+ *         return 0
+ *     if <unsigned int>buf[0] == 0x3E:
+ *         i = 1             # <<<<<<<<<<<<<<
+ *         while i < length and <unsigned int>buf[i] == 0x20:
+ *             i += 1
+*/
+    __pyx_v_i = 1;
+
+    /* "_win_console.pyx":417
+ *     if <unsigned int>buf[0] == 0x3E:
+ *         i = 1
+ *         while i < length and <unsigned int>buf[i] == 0x20:             # <<<<<<<<<<<<<<
+ *             i += 1
+ *     while i < length:
+*/
+    while (1) {
+      __pyx_t_2 = (__pyx_v_i < __pyx_v_length);
+
+      if (__pyx_t_2) {
+
+      } else {
+
+        __pyx_t_1 = __pyx_t_2;
+
+        goto __pyx_L9_bool_binop_done;
+      }
+      __pyx_t_2 = (((unsigned int)(__pyx_v_buf[__pyx_v_i])) == 0x20);
+
+
+      __pyx_t_1 = __pyx_t_2;
+
+      __pyx_L9_bool_binop_done:;
+
+      if (!__pyx_t_1) break;
+
+      /* "_win_console.pyx":418
+ *         i = 1
+ *         while i < length and <unsigned int>buf[i] == 0x20:
+ *             i += 1             # <<<<<<<<<<<<<<
+ *     while i < length:
+ *         u = <unsigned int>buf[i]
+*/
+      __pyx_v_i = (__pyx_v_i + 1);
+    }
+
+    /* "_win_console.pyx":415
+ *     if buf == NULL or length == 0:
+ *         return 0
+ *     if <unsigned int>buf[0] == 0x3E:             # <<<<<<<<<<<<<<
+ *         i = 1
+ *         while i < length and <unsigned int>buf[i] == 0x20:
+*/
+  }
+
+  /* "_win_console.pyx":419
+ *         while i < length and <unsigned int>buf[i] == 0x20:
+ *             i += 1
+ *     while i < length:             # <<<<<<<<<<<<<<
+ *         u = <unsigned int>buf[i]
+ *         if u > 0x20 and u != 0x7F:
+*/
+  while (1) {
+    __pyx_t_1 = (__pyx_v_i < __pyx_v_length);
+
+
+    if (!__pyx_t_1) break;
+
+    /* "_win_console.pyx":420
+ *             i += 1
+ *     while i < length:
+ *         u = <unsigned int>buf[i]             # <<<<<<<<<<<<<<
+ *         if u > 0x20 and u != 0x7F:
+ *             return 1
+*/
+    __pyx_v_u = ((unsigned int)(__pyx_v_buf[__pyx_v_i]));
+
+    /* "_win_console.pyx":421
+ *     while i < length:
+ *         u = <unsigned int>buf[i]
+ *         if u > 0x20 and u != 0x7F:             # <<<<<<<<<<<<<<
+ *             return 1
+ *         i += 1
+*/
+    __pyx_t_2 = (__pyx_v_u > 0x20);
+
+    if (__pyx_t_2) {
+
+    } else {
+
+      __pyx_t_1 = __pyx_t_2;
+
+      goto __pyx_L14_bool_binop_done;
+    }
+    __pyx_t_2 = (__pyx_v_u != 0x7F);
+
+
+    __pyx_t_1 = __pyx_t_2;
+
+    __pyx_L14_bool_binop_done:;
+    if (__pyx_t_1) {
+
+
+      /* "_win_console.pyx":422
+ *         u = <unsigned int>buf[i]
+ *         if u > 0x20 and u != 0x7F:
+ *             return 1             # <<<<<<<<<<<<<<
+ *         i += 1
+ *     return 0
+*/
+      {
+
+        __pyx_r = 1;
+      }
+      goto __pyx_L0;
+
+      /* "_win_console.pyx":421
+ *     while i < length:
+ *         u = <unsigned int>buf[i]
+ *         if u > 0x20 and u != 0x7F:             # <<<<<<<<<<<<<<
+ *             return 1
+ *         i += 1
+*/
+    }
+
+    /* "_win_console.pyx":423
+ *         if u > 0x20 and u != 0x7F:
+ *             return 1
+ *         i += 1             # <<<<<<<<<<<<<<
+ *     return 0
+ * 
+*/
+    __pyx_v_i = (__pyx_v_i + 1);
+  }
+
+  /* "_win_console.pyx":424
+ *             return 1
+ *         i += 1
+ *     return 0             # <<<<<<<<<<<<<<
+ * 
+ * 
+*/
+  {
+
+    __pyx_r = 0;
+  }
+  goto __pyx_L0;
+
+  /* "_win_console.pyx":410
+ * 
+ * 
+ * cdef inline bint _has_visible_w(const WCHAR* buf, DWORD length) noexcept nogil:             # <<<<<<<<<<<<<<
+ *     cdef DWORD i = 0
+ *     cdef unsigned int u = 0
+*/
+
+  /* function exit code */
+  __pyx_L0:;
+
+
+  return __pyx_r;
+}
+
+/* "_win_console.pyx":427
+ * 
+ * 
+ * cdef int _has_pending_console_key_input_c(HANDLE h_conin, DWORD* out_err) noexcept nogil:             # <<<<<<<<<<<<<<
+ *     """Returns 1 if pending key-down found, 0 if none, -1 on Win32 error."""
+ *     cdef DWORD num_events = 0
+*/
+
+static int __pyx_f_12_win_console__has_pending_console_key_input_c(HANDLE __pyx_v_h_conin, DWORD *__pyx_v_out_err) {
+  DWORD __pyx_v_num_events;
+  DWORD __pyx_v_count;
+  DWORD __pyx_v_read_count;
+  DWORD __pyx_v_actual;
+  DWORD __pyx_v_i;
+  INPUT_RECORD __pyx_v_peek_buf[64];
+  int __pyx_r;
+  int __pyx_t_1;
+  DWORD __pyx_t_2;
+  DWORD __pyx_t_3;
+  DWORD __pyx_t_4;
+  int __pyx_t_5;
+
+  /* "_win_console.pyx":429
+ * cdef int _has_pending_console_key_input_c(HANDLE h_conin, DWORD* out_err) noexcept nogil:
+ *     """Returns 1 if pending key-down found, 0 if none, -1 on Win32 error."""
+ *     cdef DWORD num_events = 0             # <<<<<<<<<<<<<<
+ *     cdef DWORD count = 0
+ *     cdef DWORD read_count = 0
+*/
+  __pyx_v_num_events = 0;
+
+  /* "_win_console.pyx":430
+ *     """Returns 1 if pending key-down found, 0 if none, -1 on Win32 error."""
+ *     cdef DWORD num_events = 0
+ *     cdef DWORD count = 0             # <<<<<<<<<<<<<<
+ *     cdef DWORD read_count = 0
+ *     cdef DWORD actual = 0
+*/
+  __pyx_v_count = 0;
+
+  /* "_win_console.pyx":431
+ *     cdef DWORD num_events = 0
+ *     cdef DWORD count = 0
+ *     cdef DWORD read_count = 0             # <<<<<<<<<<<<<<
+ *     cdef DWORD actual = 0
+ *     cdef DWORD i = 0
+*/
+  __pyx_v_read_count = 0;
+
+  /* "_win_console.pyx":432
+ *     cdef DWORD count = 0
+ *     cdef DWORD read_count = 0
+ *     cdef DWORD actual = 0             # <<<<<<<<<<<<<<
+ *     cdef DWORD i = 0
+ *     cdef INPUT_RECORD peek_buf[64]
+*/
+  __pyx_v_actual = 0;
+
+  /* "_win_console.pyx":433
+ *     cdef DWORD read_count = 0
+ *     cdef DWORD actual = 0
+ *     cdef DWORD i = 0             # <<<<<<<<<<<<<<
+ *     cdef INPUT_RECORD peek_buf[64]
+ * 
+*/
+  __pyx_v_i = 0;
+
+  /* "_win_console.pyx":436
+ *     cdef INPUT_RECORD peek_buf[64]
+ * 
+ *     if not GetNumberOfConsoleInputEvents(h_conin, &num_events):             # <<<<<<<<<<<<<<
+ *         out_err[0] = GetLastError()
+ *         return -1
+*/
+  __pyx_t_1 = (!(GetNumberOfConsoleInputEvents(__pyx_v_h_conin, (&__pyx_v_num_events)) != 0));
+
+  if (__pyx_t_1) {
+
+
+    /* "_win_console.pyx":437
+ * 
+ *     if not GetNumberOfConsoleInputEvents(h_conin, &num_events):
+ *         out_err[0] = GetLastError()             # <<<<<<<<<<<<<<
+ *         return -1
+ *     if num_events == 0:
+*/
+    (__pyx_v_out_err[0]) = GetLastError();
+
+    /* "_win_console.pyx":438
+ *     if not GetNumberOfConsoleInputEvents(h_conin, &num_events):
+ *         out_err[0] = GetLastError()
+ *         return -1             # <<<<<<<<<<<<<<
+ *     if num_events == 0:
+ *         count = 1
+*/
+    {
+
+      __pyx_r = -1;
+    }
+    goto __pyx_L0;
+
+    /* "_win_console.pyx":436
+ *     cdef INPUT_RECORD peek_buf[64]
+ * 
+ *     if not GetNumberOfConsoleInputEvents(h_conin, &num_events):             # <<<<<<<<<<<<<<
+ *         out_err[0] = GetLastError()
+ *         return -1
+*/
+  }
+
+  /* "_win_console.pyx":439
+ *         out_err[0] = GetLastError()
+ *         return -1
+ *     if num_events == 0:             # <<<<<<<<<<<<<<
+ *         count = 1
+ *     elif num_events <= 64:
+*/
+  __pyx_t_1 = (__pyx_v_num_events == 0);
+
+  if (__pyx_t_1) {
+
+
+    /* "_win_console.pyx":440
+ *         return -1
+ *     if num_events == 0:
+ *         count = 1             # <<<<<<<<<<<<<<
+ *     elif num_events <= 64:
+ *         count = num_events
+*/
+    __pyx_v_count = 1;
+
+    /* "_win_console.pyx":439
+ *         out_err[0] = GetLastError()
+ *         return -1
+ *     if num_events == 0:             # <<<<<<<<<<<<<<
+ *         count = 1
+ *     elif num_events <= 64:
+*/
+    goto __pyx_L4;
+  }
+
+  /* "_win_console.pyx":441
+ *     if num_events == 0:
+ *         count = 1
+ *     elif num_events <= 64:             # <<<<<<<<<<<<<<
+ *         count = num_events
+ *     else:
+*/
+  __pyx_t_1 = (__pyx_v_num_events <= 64);
+
+  if (__pyx_t_1) {
+
+
+    /* "_win_console.pyx":442
+ *         count = 1
+ *     elif num_events <= 64:
+ *         count = num_events             # <<<<<<<<<<<<<<
+ *     else:
+ *         count = 64
+*/
+    __pyx_v_count = __pyx_v_num_events;
+
+    /* "_win_console.pyx":441
+ *     if num_events == 0:
+ *         count = 1
+ *     elif num_events <= 64:             # <<<<<<<<<<<<<<
+ *         count = num_events
+ *     else:
+*/
+    goto __pyx_L4;
+  }
+
+  /* "_win_console.pyx":444
+ *         count = num_events
+ *     else:
+ *         count = 64             # <<<<<<<<<<<<<<
+ *     if not PeekConsoleInputW(h_conin, peek_buf, count, &read_count):
+ *         out_err[0] = GetLastError()
+*/
+  /*else*/ {
+    __pyx_v_count = 64;
+  }
+  __pyx_L4:;
+
+  /* "_win_console.pyx":445
+ *     else:
+ *         count = 64
+ *     if not PeekConsoleInputW(h_conin, peek_buf, count, &read_count):             # <<<<<<<<<<<<<<
+ *         out_err[0] = GetLastError()
+ *         return -1
+*/
+  __pyx_t_1 = (!(PeekConsoleInputW(__pyx_v_h_conin, __pyx_v_peek_buf, __pyx_v_count, (&__pyx_v_read_count)) != 0));
+
+  if (__pyx_t_1) {
+
+
+    /* "_win_console.pyx":446
+ *         count = 64
+ *     if not PeekConsoleInputW(h_conin, peek_buf, count, &read_count):
+ *         out_err[0] = GetLastError()             # <<<<<<<<<<<<<<
+ *         return -1
+ *     actual = read_count if read_count <= count else count
+*/
+    (__pyx_v_out_err[0]) = GetLastError();
+
+    /* "_win_console.pyx":447
+ *     if not PeekConsoleInputW(h_conin, peek_buf, count, &read_count):
+ *         out_err[0] = GetLastError()
+ *         return -1             # <<<<<<<<<<<<<<
+ *     actual = read_count if read_count <= count else count
+ *     for i in range(actual):
+*/
+    {
+
+      __pyx_r = -1;
+    }
+    goto __pyx_L0;
+
+    /* "_win_console.pyx":445
+ *     else:
+ *         count = 64
+ *     if not PeekConsoleInputW(h_conin, peek_buf, count, &read_count):             # <<<<<<<<<<<<<<
+ *         out_err[0] = GetLastError()
+ *         return -1
+*/
+  }
+
+  /* "_win_console.pyx":448
+ *         out_err[0] = GetLastError()
+ *         return -1
+ *     actual = read_count if read_count <= count else count             # <<<<<<<<<<<<<<
+ *     for i in range(actual):
+ *         if peek_buf[i].EventType == KEY_EVENT and peek_buf[i].Event.KeyEvent.bKeyDown:
+*/
+  __pyx_t_1 = (__pyx_v_read_count <= __pyx_v_count);
+
+  if (__pyx_t_1) {
+
+    __pyx_t_2 = __pyx_v_read_count;
+  } else {
+
+    __pyx_t_2 = __pyx_v_count;
+  }
+
+  __pyx_v_actual = __pyx_t_2;
+
+  /* "_win_console.pyx":449
+ *         return -1
+ *     actual = read_count if read_count <= count else count
+ *     for i in range(actual):             # <<<<<<<<<<<<<<
+ *         if peek_buf[i].EventType == KEY_EVENT and peek_buf[i].Event.KeyEvent.bKeyDown:
+ *             return 1
+*/
+
+  __pyx_t_2 = __pyx_v_actual;
+  __pyx_t_3 = __pyx_t_2;
+
+  for (__pyx_t_4 = 0; __pyx_t_4 < __pyx_t_3; __pyx_t_4+=1) {
+    __pyx_v_i = __pyx_t_4;
+
+    /* "_win_console.pyx":450
+ *     actual = read_count if read_count <= count else count
+ *     for i in range(actual):
+ *         if peek_buf[i].EventType == KEY_EVENT and peek_buf[i].Event.KeyEvent.bKeyDown:             # <<<<<<<<<<<<<<
+ *             return 1
+ *     return 0
+*/
+    __pyx_t_5 = ((__pyx_v_peek_buf[__pyx_v_i]).EventType == KEY_EVENT);
+
+    if (__pyx_t_5) {
+
+    } else {
+
+      __pyx_t_1 = __pyx_t_5;
+
+      goto __pyx_L9_bool_binop_done;
+    }
+    __pyx_t_5 = ((__pyx_v_peek_buf[__pyx_v_i]).Event.KeyEvent.bKeyDown != 0);
+
+
+    __pyx_t_1 = __pyx_t_5;
+
+    __pyx_L9_bool_binop_done:;
+    if (__pyx_t_1) {
+
+
+      /* "_win_console.pyx":451
+ *     for i in range(actual):
+ *         if peek_buf[i].EventType == KEY_EVENT and peek_buf[i].Event.KeyEvent.bKeyDown:
+ *             return 1             # <<<<<<<<<<<<<<
+ *     return 0
+ * 
+*/
+      {
+
+        __pyx_r = 1;
+      }
+      goto __pyx_L0;
+
+      /* "_win_console.pyx":450
+ *     actual = read_count if read_count <= count else count
+ *     for i in range(actual):
+ *         if peek_buf[i].EventType == KEY_EVENT and peek_buf[i].Event.KeyEvent.bKeyDown:             # <<<<<<<<<<<<<<
+ *             return 1
+ *     return 0
+*/
+    }
+  }
+
+
+  /* "_win_console.pyx":452
+ *         if peek_buf[i].EventType == KEY_EVENT and peek_buf[i].Event.KeyEvent.bKeyDown:
+ *             return 1
+ *     return 0             # <<<<<<<<<<<<<<
+ * 
+ * 
+*/
+  {
+
+    __pyx_r = 0;
+  }
+  goto __pyx_L0;
+
+  /* "_win_console.pyx":427
+ * 
+ * 
+ * cdef int _has_pending_console_key_input_c(HANDLE h_conin, DWORD* out_err) noexcept nogil:             # <<<<<<<<<<<<<<
+ *     """Returns 1 if pending key-down found, 0 if none, -1 on Win32 error."""
+ *     cdef DWORD num_events = 0
+*/
+
+  /* function exit code */
+  __pyx_L0:;
+
+
+
+
+
+
+  return __pyx_r;
+}
+
+/* "_win_console.pyx":455
+ * 
+ * 
+ * cdef int _has_active_cursor_or_input_line_c(HANDLE h_conout, DWORD* out_err) noexcept nogil:             # <<<<<<<<<<<<<<
+ *     """
+ *     Check 2 (2-B standalone): Sample console buffer (150ms) and return 1 if
+*/
+
+static int __pyx_f_12_win_console__has_active_cursor_or_input_line_c(HANDLE __pyx_v_h_conout, DWORD *__pyx_v_out_err) {
+  CONSOLE_SCREEN_BUFFER_INFO __pyx_v_csbi_1;
+  CONSOLE_SCREEN_BUFFER_INFO __pyx_v_csbi_2;
+  DWORD __pyx_v_read_len;
+  DWORD __pyx_v_chars_read;
+  DWORD __pyx_v_actual_len;
+  COORD __pyx_v_read_coord;
+  WCHAR *__pyx_v_char_buf;
+  int __pyx_v_active;
+  int __pyx_r;
+  int __pyx_t_1;
+  int __pyx_t_2;
+  SHORT __pyx_t_3;
+  DWORD __pyx_t_4;
+  int __pyx_t_5;
+
+  /* "_win_console.pyx":463
+ *     cdef CONSOLE_SCREEN_BUFFER_INFO csbi_1
+ *     cdef CONSOLE_SCREEN_BUFFER_INFO csbi_2
+ *     cdef DWORD read_len = 0             # <<<<<<<<<<<<<<
+ *     cdef DWORD chars_read = 0
+ *     cdef DWORD actual_len = 0
+*/
+  __pyx_v_read_len = 0;
+
+  /* "_win_console.pyx":464
+ *     cdef CONSOLE_SCREEN_BUFFER_INFO csbi_2
+ *     cdef DWORD read_len = 0
+ *     cdef DWORD chars_read = 0             # <<<<<<<<<<<<<<
+ *     cdef DWORD actual_len = 0
+ *     cdef COORD read_coord
+*/
+  __pyx_v_chars_read = 0;
+
+  /* "_win_console.pyx":465
+ *     cdef DWORD read_len = 0
+ *     cdef DWORD chars_read = 0
+ *     cdef DWORD actual_len = 0             # <<<<<<<<<<<<<<
+ *     cdef COORD read_coord
+ *     cdef WCHAR* char_buf = NULL
+*/
+  __pyx_v_actual_len = 0;
+
+  /* "_win_console.pyx":467
+ *     cdef DWORD actual_len = 0
+ *     cdef COORD read_coord
+ *     cdef WCHAR* char_buf = NULL             # <<<<<<<<<<<<<<
+ *     cdef bint active = 0
+ * 
+*/
+  __pyx_v_char_buf = NULL;
+
+  /* "_win_console.pyx":468
+ *     cdef COORD read_coord
+ *     cdef WCHAR* char_buf = NULL
+ *     cdef bint active = 0             # <<<<<<<<<<<<<<
+ * 
+ *     if h_conout == NULL or h_conout == INVALID_HANDLE_VALUE:
+*/
+  __pyx_v_active = 0;
+
+  /* "_win_console.pyx":470
+ *     cdef bint active = 0
+ * 
+ *     if h_conout == NULL or h_conout == INVALID_HANDLE_VALUE:             # <<<<<<<<<<<<<<
+ *         out_err[0] = 0
+ *         return -1
+*/
+  __pyx_t_2 = (__pyx_v_h_conout == NULL);
+
+  if (!__pyx_t_2) {
+
+  } else {
+
+    __pyx_t_1 = __pyx_t_2;
+
+    goto __pyx_L4_bool_binop_done;
+  }
+  __pyx_t_2 = (__pyx_v_h_conout == INVALID_HANDLE_VALUE);
+
+
+  __pyx_t_1 = __pyx_t_2;
+
+  __pyx_L4_bool_binop_done:;
+  if (__pyx_t_1) {
+
+
+    /* "_win_console.pyx":471
+ * 
+ *     if h_conout == NULL or h_conout == INVALID_HANDLE_VALUE:
+ *         out_err[0] = 0             # <<<<<<<<<<<<<<
+ *         return -1
+ *     memset(&csbi_1, 0, sizeof(CONSOLE_SCREEN_BUFFER_INFO))
+*/
+    (__pyx_v_out_err[0]) = 0;
+
+    /* "_win_console.pyx":472
+ *     if h_conout == NULL or h_conout == INVALID_HANDLE_VALUE:
+ *         out_err[0] = 0
+ *         return -1             # <<<<<<<<<<<<<<
+ *     memset(&csbi_1, 0, sizeof(CONSOLE_SCREEN_BUFFER_INFO))
+ *     if not GetConsoleScreenBufferInfo(h_conout, &csbi_1):
+*/
+    {
+
+      __pyx_r = -1;
+    }
+    goto __pyx_L0;
+
+    /* "_win_console.pyx":470
+ *     cdef bint active = 0
+ * 
+ *     if h_conout == NULL or h_conout == INVALID_HANDLE_VALUE:             # <<<<<<<<<<<<<<
+ *         out_err[0] = 0
+ *         return -1
+*/
+  }
+
+  /* "_win_console.pyx":473
+ *         out_err[0] = 0
+ *         return -1
+ *     memset(&csbi_1, 0, sizeof(CONSOLE_SCREEN_BUFFER_INFO))             # <<<<<<<<<<<<<<
+ *     if not GetConsoleScreenBufferInfo(h_conout, &csbi_1):
+ *         out_err[0] = GetLastError()
+*/
+  (void)(memset((&__pyx_v_csbi_1), 0, (sizeof(CONSOLE_SCREEN_BUFFER_INFO))));
+
+  /* "_win_console.pyx":474
+ *         return -1
+ *     memset(&csbi_1, 0, sizeof(CONSOLE_SCREEN_BUFFER_INFO))
+ *     if not GetConsoleScreenBufferInfo(h_conout, &csbi_1):             # <<<<<<<<<<<<<<
+ *         out_err[0] = GetLastError()
+ *         return -1
+*/
+  __pyx_t_1 = (!(GetConsoleScreenBufferInfo(__pyx_v_h_conout, (&__pyx_v_csbi_1)) != 0));
+
+  if (__pyx_t_1) {
+
+
+    /* "_win_console.pyx":475
+ *     memset(&csbi_1, 0, sizeof(CONSOLE_SCREEN_BUFFER_INFO))
+ *     if not GetConsoleScreenBufferInfo(h_conout, &csbi_1):
+ *         out_err[0] = GetLastError()             # <<<<<<<<<<<<<<
+ *         return -1
+ * 
+*/
+    (__pyx_v_out_err[0]) = GetLastError();
+
+    /* "_win_console.pyx":476
+ *     if not GetConsoleScreenBufferInfo(h_conout, &csbi_1):
+ *         out_err[0] = GetLastError()
+ *         return -1             # <<<<<<<<<<<<<<
+ * 
+ *     Sleep(150)
+*/
+    {
+
+      __pyx_r = -1;
+    }
+    goto __pyx_L0;
+
+    /* "_win_console.pyx":474
+ *         return -1
+ *     memset(&csbi_1, 0, sizeof(CONSOLE_SCREEN_BUFFER_INFO))
+ *     if not GetConsoleScreenBufferInfo(h_conout, &csbi_1):             # <<<<<<<<<<<<<<
+ *         out_err[0] = GetLastError()
+ *         return -1
+*/
+  }
+
+  /* "_win_console.pyx":478
+ *         return -1
+ * 
+ *     Sleep(150)             # <<<<<<<<<<<<<<
+ * 
+ *     memset(&csbi_2, 0, sizeof(CONSOLE_SCREEN_BUFFER_INFO))
+*/
+  Sleep(0x96);
+
+  /* "_win_console.pyx":480
+ *     Sleep(150)
+ * 
+ *     memset(&csbi_2, 0, sizeof(CONSOLE_SCREEN_BUFFER_INFO))             # <<<<<<<<<<<<<<
+ *     if not GetConsoleScreenBufferInfo(h_conout, &csbi_2):
+ *         out_err[0] = GetLastError()
+*/
+  (void)(memset((&__pyx_v_csbi_2), 0, (sizeof(CONSOLE_SCREEN_BUFFER_INFO))));
+
+  /* "_win_console.pyx":481
+ * 
+ *     memset(&csbi_2, 0, sizeof(CONSOLE_SCREEN_BUFFER_INFO))
+ *     if not GetConsoleScreenBufferInfo(h_conout, &csbi_2):             # <<<<<<<<<<<<<<
+ *         out_err[0] = GetLastError()
+ *         return -1
+*/
+  __pyx_t_1 = (!(GetConsoleScreenBufferInfo(__pyx_v_h_conout, (&__pyx_v_csbi_2)) != 0));
+
+  if (__pyx_t_1) {
+
+
+    /* "_win_console.pyx":482
+ *     memset(&csbi_2, 0, sizeof(CONSOLE_SCREEN_BUFFER_INFO))
+ *     if not GetConsoleScreenBufferInfo(h_conout, &csbi_2):
+ *         out_err[0] = GetLastError()             # <<<<<<<<<<<<<<
+ *         return -1
+ * 
+*/
+    (__pyx_v_out_err[0]) = GetLastError();
+
+    /* "_win_console.pyx":483
+ *     if not GetConsoleScreenBufferInfo(h_conout, &csbi_2):
+ *         out_err[0] = GetLastError()
+ *         return -1             # <<<<<<<<<<<<<<
+ * 
+ *     if csbi_2.dwCursorPosition.X <= 0 or csbi_2.dwCursorPosition.Y < 0:
+*/
+    {
+
+      __pyx_r = -1;
+    }
+    goto __pyx_L0;
+
+    /* "_win_console.pyx":481
+ * 
+ *     memset(&csbi_2, 0, sizeof(CONSOLE_SCREEN_BUFFER_INFO))
+ *     if not GetConsoleScreenBufferInfo(h_conout, &csbi_2):             # <<<<<<<<<<<<<<
+ *         out_err[0] = GetLastError()
+ *         return -1
+*/
+  }
+
+  /* "_win_console.pyx":485
+ *         return -1
+ * 
+ *     if csbi_2.dwCursorPosition.X <= 0 or csbi_2.dwCursorPosition.Y < 0:             # <<<<<<<<<<<<<<
+ *         return 0
+ * 
+*/
+  __pyx_t_2 = (__pyx_v_csbi_2.dwCursorPosition.X <= 0);
+
+  if (!__pyx_t_2) {
+
+  } else {
+
+    __pyx_t_1 = __pyx_t_2;
+
+    goto __pyx_L9_bool_binop_done;
+  }
+  __pyx_t_2 = (__pyx_v_csbi_2.dwCursorPosition.Y < 0);
+
+
+  __pyx_t_1 = __pyx_t_2;
+
+  __pyx_L9_bool_binop_done:;
+  if (__pyx_t_1) {
+
+
+    /* "_win_console.pyx":486
+ * 
+ *     if csbi_2.dwCursorPosition.X <= 0 or csbi_2.dwCursorPosition.Y < 0:
+ *         return 0             # <<<<<<<<<<<<<<
+ * 
+ *     read_len = <DWORD>csbi_2.dwCursorPosition.X
+*/
+    {
+
+      __pyx_r = 0;
+    }
+    goto __pyx_L0;
+
+    /* "_win_console.pyx":485
+ *         return -1
+ * 
+ *     if csbi_2.dwCursorPosition.X <= 0 or csbi_2.dwCursorPosition.Y < 0:             # <<<<<<<<<<<<<<
+ *         return 0
+ * 
+*/
+  }
+
+  /* "_win_console.pyx":488
+ *         return 0
+ * 
+ *     read_len = <DWORD>csbi_2.dwCursorPosition.X             # <<<<<<<<<<<<<<
+ *     if read_len > 4096:
+ *         read_len = 4096
+*/
+  __pyx_v_read_len = ((DWORD)__pyx_v_csbi_2.dwCursorPosition.X);
+
+  /* "_win_console.pyx":489
+ * 
+ *     read_len = <DWORD>csbi_2.dwCursorPosition.X
+ *     if read_len > 4096:             # <<<<<<<<<<<<<<
+ *         read_len = 4096
+ * 
+*/
+  __pyx_t_1 = (__pyx_v_read_len > 0x1000);
+
+  if (__pyx_t_1) {
+
+
+    /* "_win_console.pyx":490
+ *     read_len = <DWORD>csbi_2.dwCursorPosition.X
+ *     if read_len > 4096:
+ *         read_len = 4096             # <<<<<<<<<<<<<<
+ * 
+ *     char_buf = <WCHAR*>malloc(sizeof(WCHAR) * (read_len + 1))
+*/
+    __pyx_v_read_len = 0x1000;
+
+    /* "_win_console.pyx":489
+ * 
+ *     read_len = <DWORD>csbi_2.dwCursorPosition.X
+ *     if read_len > 4096:             # <<<<<<<<<<<<<<
+ *         read_len = 4096
+ * 
+*/
+  }
+
+  /* "_win_console.pyx":492
+ *         read_len = 4096
+ * 
+ *     char_buf = <WCHAR*>malloc(sizeof(WCHAR) * (read_len + 1))             # <<<<<<<<<<<<<<
+ *     if char_buf == NULL:
+ *         out_err[0] = 0
+*/
+  __pyx_v_char_buf = ((WCHAR *)malloc(((sizeof(WCHAR)) * (__pyx_v_read_len + 1))));
+
+  /* "_win_console.pyx":493
+ * 
+ *     char_buf = <WCHAR*>malloc(sizeof(WCHAR) * (read_len + 1))
+ *     if char_buf == NULL:             # <<<<<<<<<<<<<<
+ *         out_err[0] = 0
+ *         return -1
+*/
+  __pyx_t_1 = (__pyx_v_char_buf == NULL);
+
+  if (__pyx_t_1) {
+
+
+    /* "_win_console.pyx":494
+ *     char_buf = <WCHAR*>malloc(sizeof(WCHAR) * (read_len + 1))
+ *     if char_buf == NULL:
+ *         out_err[0] = 0             # <<<<<<<<<<<<<<
+ *         return -1
+ *     read_coord.X = 0
+*/
+    (__pyx_v_out_err[0]) = 0;
+
+    /* "_win_console.pyx":495
+ *     if char_buf == NULL:
+ *         out_err[0] = 0
+ *         return -1             # <<<<<<<<<<<<<<
+ *     read_coord.X = 0
+ *     read_coord.Y = csbi_2.dwCursorPosition.Y
+*/
+    {
+
+      __pyx_r = -1;
+    }
+    goto __pyx_L0;
+
+    /* "_win_console.pyx":493
+ * 
+ *     char_buf = <WCHAR*>malloc(sizeof(WCHAR) * (read_len + 1))
+ *     if char_buf == NULL:             # <<<<<<<<<<<<<<
+ *         out_err[0] = 0
+ *         return -1
+*/
+  }
+
+  /* "_win_console.pyx":496
+ *         out_err[0] = 0
+ *         return -1
+ *     read_coord.X = 0             # <<<<<<<<<<<<<<
+ *     read_coord.Y = csbi_2.dwCursorPosition.Y
+ *     if not ReadConsoleOutputCharacterW(h_conout, char_buf, read_len, read_coord, &chars_read):
+*/
+  __pyx_v_read_coord.X = 0;
+
+  /* "_win_console.pyx":497
+ *         return -1
+ *     read_coord.X = 0
+ *     read_coord.Y = csbi_2.dwCursorPosition.Y             # <<<<<<<<<<<<<<
+ *     if not ReadConsoleOutputCharacterW(h_conout, char_buf, read_len, read_coord, &chars_read):
+ *         out_err[0] = GetLastError()
+*/
+  __pyx_t_3 = __pyx_v_csbi_2.dwCursorPosition.Y;
+
+  __pyx_v_read_coord.Y = __pyx_t_3;
+
+  /* "_win_console.pyx":498
+ *     read_coord.X = 0
+ *     read_coord.Y = csbi_2.dwCursorPosition.Y
+ *     if not ReadConsoleOutputCharacterW(h_conout, char_buf, read_len, read_coord, &chars_read):             # <<<<<<<<<<<<<<
+ *         out_err[0] = GetLastError()
+ *         free(char_buf)
+*/
+  __pyx_t_1 = (!(ReadConsoleOutputCharacterW(__pyx_v_h_conout, __pyx_v_char_buf, __pyx_v_read_len, __pyx_v_read_coord, (&__pyx_v_chars_read)) != 0));
+
+  if (__pyx_t_1) {
+
+
+    /* "_win_console.pyx":499
+ *     read_coord.Y = csbi_2.dwCursorPosition.Y
+ *     if not ReadConsoleOutputCharacterW(h_conout, char_buf, read_len, read_coord, &chars_read):
+ *         out_err[0] = GetLastError()             # <<<<<<<<<<<<<<
+ *         free(char_buf)
+ *         return -1
+*/
+    (__pyx_v_out_err[0]) = GetLastError();
+
+    /* "_win_console.pyx":500
+ *     if not ReadConsoleOutputCharacterW(h_conout, char_buf, read_len, read_coord, &chars_read):
+ *         out_err[0] = GetLastError()
+ *         free(char_buf)             # <<<<<<<<<<<<<<
+ *         return -1
+ *     actual_len = chars_read if chars_read <= read_len else read_len
+*/
+    free(__pyx_v_char_buf);
+
+    /* "_win_console.pyx":501
+ *         out_err[0] = GetLastError()
+ *         free(char_buf)
+ *         return -1             # <<<<<<<<<<<<<<
+ *     actual_len = chars_read if chars_read <= read_len else read_len
+ *     if actual_len > 0:
+*/
+    {
+
+      __pyx_r = -1;
+    }
+    goto __pyx_L0;
+
+    /* "_win_console.pyx":498
+ *     read_coord.X = 0
+ *     read_coord.Y = csbi_2.dwCursorPosition.Y
+ *     if not ReadConsoleOutputCharacterW(h_conout, char_buf, read_len, read_coord, &chars_read):             # <<<<<<<<<<<<<<
+ *         out_err[0] = GetLastError()
+ *         free(char_buf)
+*/
+  }
+
+  /* "_win_console.pyx":502
+ *         free(char_buf)
+ *         return -1
+ *     actual_len = chars_read if chars_read <= read_len else read_len             # <<<<<<<<<<<<<<
+ *     if actual_len > 0:
+ *         active = _has_visible_w(char_buf, actual_len)
+*/
+  __pyx_t_1 = (__pyx_v_chars_read <= __pyx_v_read_len);
+
+  if (__pyx_t_1) {
+
+    __pyx_t_4 = __pyx_v_chars_read;
+  } else {
+
+    __pyx_t_4 = __pyx_v_read_len;
+  }
+
+  __pyx_v_actual_len = __pyx_t_4;
+
+  /* "_win_console.pyx":503
+ *         return -1
+ *     actual_len = chars_read if chars_read <= read_len else read_len
+ *     if actual_len > 0:             # <<<<<<<<<<<<<<
+ *         active = _has_visible_w(char_buf, actual_len)
+ *     free(char_buf)
+*/
+  __pyx_t_1 = (__pyx_v_actual_len > 0);
+
+  if (__pyx_t_1) {
+
+
+    /* "_win_console.pyx":504
+ *     actual_len = chars_read if chars_read <= read_len else read_len
+ *     if actual_len > 0:
+ *         active = _has_visible_w(char_buf, actual_len)             # <<<<<<<<<<<<<<
+ *     free(char_buf)
+ *     return 1 if active else 0
+*/
+    __pyx_v_active = __pyx_f_12_win_console__has_visible_w(__pyx_v_char_buf, __pyx_v_actual_len);
+
+    /* "_win_console.pyx":503
+ *         return -1
+ *     actual_len = chars_read if chars_read <= read_len else read_len
+ *     if actual_len > 0:             # <<<<<<<<<<<<<<
+ *         active = _has_visible_w(char_buf, actual_len)
+ *     free(char_buf)
+*/
+  }
+
+  /* "_win_console.pyx":505
+ *     if actual_len > 0:
+ *         active = _has_visible_w(char_buf, actual_len)
+ *     free(char_buf)             # <<<<<<<<<<<<<<
+ *     return 1 if active else 0
+ * 
+*/
+  free(__pyx_v_char_buf);
+
+  /* "_win_console.pyx":506
+ *         active = _has_visible_w(char_buf, actual_len)
+ *     free(char_buf)
+ *     return 1 if active else 0             # <<<<<<<<<<<<<<
+ * 
+ * 
+*/
+  if (__pyx_v_active) {
+
+    __pyx_t_5 = 1;
+  } else {
+
+    __pyx_t_5 = 0;
+  }
+  {
+    __pyx_r = __pyx_t_5;
+  }
+  goto __pyx_L0;
+
+  /* "_win_console.pyx":455
+ * 
+ * 
+ * cdef int _has_active_cursor_or_input_line_c(HANDLE h_conout, DWORD* out_err) noexcept nogil:             # <<<<<<<<<<<<<<
+ *     """
+ *     Check 2 (2-B standalone): Sample console buffer (150ms) and return 1 if
+*/
+
+  /* function exit code */
+  __pyx_L0:;
+
+
+
+
+
+
+
+
+  return __pyx_r;
+}
+
+/* "_win_console.pyx":509
+ * 
+ * 
+ * cdef int _check_user_typing_with_retries_c(             # <<<<<<<<<<<<<<
+ *     HANDLE h_proc,
+ *     HANDLE h_conin,
+*/
+
+static int __pyx_f_12_win_console__check_user_typing_with_retries_c(HANDLE __pyx_v_h_proc, HANDLE __pyx_v_h_conin, DWORD *__pyx_v_out_err) {
+  int __pyx_v_attempt;
+  int __pyx_v_ev_res;
+  int __pyx_v_scr_res;
+  int __pyx_v_typing_now;
+  HANDLE __pyx_v_h_conout;
+  int __pyx_v_conout_tried;
+  int __pyx_r;
+  int __pyx_t_1;
+  int __pyx_t_2;
+  int __pyx_t_3;
+
+  /* "_win_console.pyx":521
+ *     - 6: user_typing_check_failed (with out_err populated)
+ *     """
+ *     cdef int attempt = 0             # <<<<<<<<<<<<<<
+ *     cdef int ev_res = 0
+ *     cdef int scr_res = 0
+*/
+  __pyx_v_attempt = 0;
+
+  /* "_win_console.pyx":522
+ *     """
+ *     cdef int attempt = 0
+ *     cdef int ev_res = 0             # <<<<<<<<<<<<<<
+ *     cdef int scr_res = 0
+ *     cdef bint typing_now = 0
+*/
+  __pyx_v_ev_res = 0;
+
+  /* "_win_console.pyx":523
+ *     cdef int attempt = 0
+ *     cdef int ev_res = 0
+ *     cdef int scr_res = 0             # <<<<<<<<<<<<<<
+ *     cdef bint typing_now = 0
+ *     cdef HANDLE h_conout = INVALID_HANDLE_VALUE
+*/
+  __pyx_v_scr_res = 0;
+
+  /* "_win_console.pyx":524
+ *     cdef int ev_res = 0
+ *     cdef int scr_res = 0
+ *     cdef bint typing_now = 0             # <<<<<<<<<<<<<<
+ *     cdef HANDLE h_conout = INVALID_HANDLE_VALUE
+ *     cdef bint conout_tried = 0
+*/
+  __pyx_v_typing_now = 0;
+
+  /* "_win_console.pyx":525
+ *     cdef int scr_res = 0
+ *     cdef bint typing_now = 0
+ *     cdef HANDLE h_conout = INVALID_HANDLE_VALUE             # <<<<<<<<<<<<<<
+ *     cdef bint conout_tried = 0
+ * 
+*/
+  __pyx_v_h_conout = INVALID_HANDLE_VALUE;
+
+  /* "_win_console.pyx":526
+ *     cdef bint typing_now = 0
+ *     cdef HANDLE h_conout = INVALID_HANDLE_VALUE
+ *     cdef bint conout_tried = 0             # <<<<<<<<<<<<<<
+ * 
+ *     out_err[0] = 0
+*/
+  __pyx_v_conout_tried = 0;
+
+  /* "_win_console.pyx":528
+ *     cdef bint conout_tried = 0
+ * 
+ *     out_err[0] = 0             # <<<<<<<<<<<<<<
+ *     for attempt in range(3):
+ *         if attempt > 0:
+*/
+  (__pyx_v_out_err[0]) = 0;
+
+  /* "_win_console.pyx":529
+ * 
+ *     out_err[0] = 0
+ *     for attempt in range(3):             # <<<<<<<<<<<<<<
+ *         if attempt > 0:
+ *             if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
+*/
+  for (__pyx_t_1 = 0; __pyx_t_1 < 3; __pyx_t_1+=1) {
+    __pyx_v_attempt = __pyx_t_1;
+
+    /* "_win_console.pyx":530
+ *     out_err[0] = 0
+ *     for attempt in range(3):
+ *         if attempt > 0:             # <<<<<<<<<<<<<<
+ *             if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
+ *                 if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+*/
+    __pyx_t_2 = (__pyx_v_attempt > 0);
+
+    if (__pyx_t_2) {
+
+
+      /* "_win_console.pyx":531
+ *     for attempt in range(3):
+ *         if attempt > 0:
+ *             if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:             # <<<<<<<<<<<<<<
+ *                 if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+ *                     CloseHandle(h_conout)
+*/
+      __pyx_t_2 = (WaitForSingleObject(__pyx_v_h_proc, 0) != WAIT_TIMEOUT);
+
+      if (__pyx_t_2) {
+
+
+        /* "_win_console.pyx":532
+ *         if attempt > 0:
+ *             if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
+ *                 if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:             # <<<<<<<<<<<<<<
+ *                     CloseHandle(h_conout)
+ *                 return 3
+*/
+        __pyx_t_3 = (__pyx_v_h_conout != INVALID_HANDLE_VALUE);
+
+        if (__pyx_t_3) {
+
+        } else {
+
+          __pyx_t_2 = __pyx_t_3;
+
+          goto __pyx_L8_bool_binop_done;
+        }
+        __pyx_t_3 = (__pyx_v_h_conout != NULL);
+
+
+        __pyx_t_2 = __pyx_t_3;
+
+        __pyx_L8_bool_binop_done:;
+        if (__pyx_t_2) {
+
+
+          /* "_win_console.pyx":533
+ *             if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
+ *                 if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+ *                     CloseHandle(h_conout)             # <<<<<<<<<<<<<<
+ *                 return 3
+ * 
+*/
+          (void)(CloseHandle(__pyx_v_h_conout));
+
+          /* "_win_console.pyx":532
+ *         if attempt > 0:
+ *             if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
+ *                 if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:             # <<<<<<<<<<<<<<
+ *                     CloseHandle(h_conout)
+ *                 return 3
+*/
+        }
+
+        /* "_win_console.pyx":534
+ *                 if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+ *                     CloseHandle(h_conout)
+ *                 return 3             # <<<<<<<<<<<<<<
+ * 
+ *         typing_now = 0
+*/
+        {
+
+          __pyx_r = 3;
+        }
+        goto __pyx_L0;
+
+        /* "_win_console.pyx":531
+ *     for attempt in range(3):
+ *         if attempt > 0:
+ *             if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:             # <<<<<<<<<<<<<<
+ *                 if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+ *                     CloseHandle(h_conout)
+*/
+      }
+
+      /* "_win_console.pyx":530
+ *     out_err[0] = 0
+ *     for attempt in range(3):
+ *         if attempt > 0:             # <<<<<<<<<<<<<<
+ *             if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
+ *                 if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+*/
+    }
+
+    /* "_win_console.pyx":536
+ *                 return 3
+ * 
+ *         typing_now = 0             # <<<<<<<<<<<<<<
+ *         ev_res = _has_pending_console_key_input_c(h_conin, out_err)
+ *         if ev_res < 0:
+*/
+    __pyx_v_typing_now = 0;
+
+    /* "_win_console.pyx":537
+ * 
+ *         typing_now = 0
+ *         ev_res = _has_pending_console_key_input_c(h_conin, out_err)             # <<<<<<<<<<<<<<
+ *         if ev_res < 0:
+ *             if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+*/
+    __pyx_v_ev_res = __pyx_f_12_win_console__has_pending_console_key_input_c(__pyx_v_h_conin, __pyx_v_out_err);
+
+    /* "_win_console.pyx":538
+ *         typing_now = 0
+ *         ev_res = _has_pending_console_key_input_c(h_conin, out_err)
+ *         if ev_res < 0:             # <<<<<<<<<<<<<<
+ *             if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+ *                 CloseHandle(h_conout)
+*/
+    __pyx_t_2 = (__pyx_v_ev_res < 0);
+
+    if (__pyx_t_2) {
+
+
+      /* "_win_console.pyx":539
+ *         ev_res = _has_pending_console_key_input_c(h_conin, out_err)
+ *         if ev_res < 0:
+ *             if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:             # <<<<<<<<<<<<<<
+ *                 CloseHandle(h_conout)
+ *             return 6
+*/
+      __pyx_t_3 = (__pyx_v_h_conout != INVALID_HANDLE_VALUE);
+
+      if (__pyx_t_3) {
+
+      } else {
+
+        __pyx_t_2 = __pyx_t_3;
+
+        goto __pyx_L12_bool_binop_done;
+      }
+      __pyx_t_3 = (__pyx_v_h_conout != NULL);
+
+
+      __pyx_t_2 = __pyx_t_3;
+
+      __pyx_L12_bool_binop_done:;
+      if (__pyx_t_2) {
+
+
+        /* "_win_console.pyx":540
+ *         if ev_res < 0:
+ *             if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+ *                 CloseHandle(h_conout)             # <<<<<<<<<<<<<<
+ *             return 6
+ *         if ev_res > 0:
+*/
+        (void)(CloseHandle(__pyx_v_h_conout));
+
+        /* "_win_console.pyx":539
+ *         ev_res = _has_pending_console_key_input_c(h_conin, out_err)
+ *         if ev_res < 0:
+ *             if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:             # <<<<<<<<<<<<<<
+ *                 CloseHandle(h_conout)
+ *             return 6
+*/
+      }
+
+      /* "_win_console.pyx":541
+ *             if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+ *                 CloseHandle(h_conout)
+ *             return 6             # <<<<<<<<<<<<<<
+ *         if ev_res > 0:
+ *             typing_now = 1
+*/
+      {
+
+        __pyx_r = 6;
+      }
+      goto __pyx_L0;
+
+      /* "_win_console.pyx":538
+ *         typing_now = 0
+ *         ev_res = _has_pending_console_key_input_c(h_conin, out_err)
+ *         if ev_res < 0:             # <<<<<<<<<<<<<<
+ *             if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+ *                 CloseHandle(h_conout)
+*/
+    }
+
+    /* "_win_console.pyx":542
+ *                 CloseHandle(h_conout)
+ *             return 6
+ *         if ev_res > 0:             # <<<<<<<<<<<<<<
+ *             typing_now = 1
+ *         if not conout_tried:
+*/
+    __pyx_t_2 = (__pyx_v_ev_res > 0);
+
+    if (__pyx_t_2) {
+
+
+      /* "_win_console.pyx":543
+ *             return 6
+ *         if ev_res > 0:
+ *             typing_now = 1             # <<<<<<<<<<<<<<
+ *         if not conout_tried:
+ *             conout_tried = 1
+*/
+      __pyx_v_typing_now = 1;
+
+      /* "_win_console.pyx":542
+ *                 CloseHandle(h_conout)
+ *             return 6
+ *         if ev_res > 0:             # <<<<<<<<<<<<<<
+ *             typing_now = 1
+ *         if not conout_tried:
+*/
+    }
+
+    /* "_win_console.pyx":544
+ *         if ev_res > 0:
+ *             typing_now = 1
+ *         if not conout_tried:             # <<<<<<<<<<<<<<
+ *             conout_tried = 1
+ *             h_conout = CreateFileW(
+*/
+    __pyx_t_2 = (!__pyx_v_conout_tried);
+
+    if (__pyx_t_2) {
+
+
+      /* "_win_console.pyx":545
+ *             typing_now = 1
+ *         if not conout_tried:
+ *             conout_tried = 1             # <<<<<<<<<<<<<<
+ *             h_conout = CreateFileW(
+ *                 CONOUT_DEVICE_NAME,
+*/
+      __pyx_v_conout_tried = 1;
+
+      /* "_win_console.pyx":546
+ *         if not conout_tried:
+ *             conout_tried = 1
+ *             h_conout = CreateFileW(             # <<<<<<<<<<<<<<
+ *                 CONOUT_DEVICE_NAME,
+ *                 GENERIC_READ,
+*/
+      __pyx_v_h_conout = CreateFileW(CONOUT_DEVICE_NAME, GENERIC_READ, (FILE_SHARE_READ | FILE_SHARE_WRITE), NULL, OPEN_EXISTING, 0, NULL);
+
+      /* "_win_console.pyx":555
+ *                 NULL,
+ *             )
+ *             if h_conout == INVALID_HANDLE_VALUE or h_conout == NULL:             # <<<<<<<<<<<<<<
+ *                 out_err[0] = GetLastError()
+ *                 return 6
+*/
+      __pyx_t_3 = (__pyx_v_h_conout == INVALID_HANDLE_VALUE);
+
+      if (!__pyx_t_3) {
+
+      } else {
+
+        __pyx_t_2 = __pyx_t_3;
+
+        goto __pyx_L17_bool_binop_done;
+      }
+      __pyx_t_3 = (__pyx_v_h_conout == NULL);
+
+
+      __pyx_t_2 = __pyx_t_3;
+
+      __pyx_L17_bool_binop_done:;
+      if (__pyx_t_2) {
+
+
+        /* "_win_console.pyx":556
+ *             )
+ *             if h_conout == INVALID_HANDLE_VALUE or h_conout == NULL:
+ *                 out_err[0] = GetLastError()             # <<<<<<<<<<<<<<
+ *                 return 6
+ *         scr_res = _has_active_cursor_or_input_line_c(h_conout, out_err)
+*/
+        (__pyx_v_out_err[0]) = GetLastError();
+
+        /* "_win_console.pyx":557
+ *             if h_conout == INVALID_HANDLE_VALUE or h_conout == NULL:
+ *                 out_err[0] = GetLastError()
+ *                 return 6             # <<<<<<<<<<<<<<
+ *         scr_res = _has_active_cursor_or_input_line_c(h_conout, out_err)
+ *         if scr_res < 0:
+*/
+        {
+
+          __pyx_r = 6;
+        }
+        goto __pyx_L0;
+
+        /* "_win_console.pyx":555
+ *                 NULL,
+ *             )
+ *             if h_conout == INVALID_HANDLE_VALUE or h_conout == NULL:             # <<<<<<<<<<<<<<
+ *                 out_err[0] = GetLastError()
+ *                 return 6
+*/
+      }
+
+      /* "_win_console.pyx":544
+ *         if ev_res > 0:
+ *             typing_now = 1
+ *         if not conout_tried:             # <<<<<<<<<<<<<<
+ *             conout_tried = 1
+ *             h_conout = CreateFileW(
+*/
+    }
+
+    /* "_win_console.pyx":558
+ *                 out_err[0] = GetLastError()
+ *                 return 6
+ *         scr_res = _has_active_cursor_or_input_line_c(h_conout, out_err)             # <<<<<<<<<<<<<<
+ *         if scr_res < 0:
+ *             CloseHandle(h_conout)
+*/
+    __pyx_v_scr_res = __pyx_f_12_win_console__has_active_cursor_or_input_line_c(__pyx_v_h_conout, __pyx_v_out_err);
+
+    /* "_win_console.pyx":559
+ *                 return 6
+ *         scr_res = _has_active_cursor_or_input_line_c(h_conout, out_err)
+ *         if scr_res < 0:             # <<<<<<<<<<<<<<
+ *             CloseHandle(h_conout)
+ *             return 6
+*/
+    __pyx_t_2 = (__pyx_v_scr_res < 0);
+
+    if (__pyx_t_2) {
+
+
+      /* "_win_console.pyx":560
+ *         scr_res = _has_active_cursor_or_input_line_c(h_conout, out_err)
+ *         if scr_res < 0:
+ *             CloseHandle(h_conout)             # <<<<<<<<<<<<<<
+ *             return 6
+ *         if scr_res > 0:
+*/
+      (void)(CloseHandle(__pyx_v_h_conout));
+
+      /* "_win_console.pyx":561
+ *         if scr_res < 0:
+ *             CloseHandle(h_conout)
+ *             return 6             # <<<<<<<<<<<<<<
+ *         if scr_res > 0:
+ *             typing_now = 1
+*/
+      {
+
+        __pyx_r = 6;
+      }
+      goto __pyx_L0;
+
+      /* "_win_console.pyx":559
+ *                 return 6
+ *         scr_res = _has_active_cursor_or_input_line_c(h_conout, out_err)
+ *         if scr_res < 0:             # <<<<<<<<<<<<<<
+ *             CloseHandle(h_conout)
+ *             return 6
+*/
+    }
+
+    /* "_win_console.pyx":562
+ *             CloseHandle(h_conout)
+ *             return 6
+ *         if scr_res > 0:             # <<<<<<<<<<<<<<
+ *             typing_now = 1
+ * 
+*/
+    __pyx_t_2 = (__pyx_v_scr_res > 0);
+
+    if (__pyx_t_2) {
+
+
+      /* "_win_console.pyx":563
+ *             return 6
+ *         if scr_res > 0:
+ *             typing_now = 1             # <<<<<<<<<<<<<<
+ * 
+ *         if not typing_now:
+*/
+      __pyx_v_typing_now = 1;
+
+      /* "_win_console.pyx":562
+ *             CloseHandle(h_conout)
+ *             return 6
+ *         if scr_res > 0:             # <<<<<<<<<<<<<<
+ *             typing_now = 1
+ * 
+*/
+    }
+
+    /* "_win_console.pyx":565
+ *             typing_now = 1
+ * 
+ *         if not typing_now:             # <<<<<<<<<<<<<<
+ *             if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+ *                 CloseHandle(h_conout)
+*/
+    __pyx_t_2 = (!__pyx_v_typing_now);
+
+    if (__pyx_t_2) {
+
+
+      /* "_win_console.pyx":566
+ * 
+ *         if not typing_now:
+ *             if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:             # <<<<<<<<<<<<<<
+ *                 CloseHandle(h_conout)
+ *             return 0
+*/
+      __pyx_t_3 = (__pyx_v_h_conout != INVALID_HANDLE_VALUE);
+
+      if (__pyx_t_3) {
+
+      } else {
+
+        __pyx_t_2 = __pyx_t_3;
+
+        goto __pyx_L23_bool_binop_done;
+      }
+      __pyx_t_3 = (__pyx_v_h_conout != NULL);
+
+
+      __pyx_t_2 = __pyx_t_3;
+
+      __pyx_L23_bool_binop_done:;
+      if (__pyx_t_2) {
+
+
+        /* "_win_console.pyx":567
+ *         if not typing_now:
+ *             if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+ *                 CloseHandle(h_conout)             # <<<<<<<<<<<<<<
+ *             return 0
+ * 
+*/
+        (void)(CloseHandle(__pyx_v_h_conout));
+
+        /* "_win_console.pyx":566
+ * 
+ *         if not typing_now:
+ *             if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:             # <<<<<<<<<<<<<<
+ *                 CloseHandle(h_conout)
+ *             return 0
+*/
+      }
+
+      /* "_win_console.pyx":568
+ *             if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+ *                 CloseHandle(h_conout)
+ *             return 0             # <<<<<<<<<<<<<<
+ * 
+ *         if attempt < 2:
+*/
+      {
+
+        __pyx_r = 0;
+      }
+      goto __pyx_L0;
+
+      /* "_win_console.pyx":565
+ *             typing_now = 1
+ * 
+ *         if not typing_now:             # <<<<<<<<<<<<<<
+ *             if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+ *                 CloseHandle(h_conout)
+*/
+    }
+
+    /* "_win_console.pyx":570
+ *             return 0
+ * 
+ *         if attempt < 2:             # <<<<<<<<<<<<<<
+ *             Sleep(400)
+ * 
+*/
+    __pyx_t_2 = (__pyx_v_attempt < 2);
+
+    if (__pyx_t_2) {
+
+
+      /* "_win_console.pyx":571
+ * 
+ *         if attempt < 2:
+ *             Sleep(400)             # <<<<<<<<<<<<<<
+ * 
+ *     if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+*/
+      Sleep(0x190);
+
+      /* "_win_console.pyx":570
+ *             return 0
+ * 
+ *         if attempt < 2:             # <<<<<<<<<<<<<<
+ *             Sleep(400)
+ * 
+*/
+    }
+  }
+
+  /* "_win_console.pyx":573
+ *             Sleep(400)
+ * 
+ *     if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:             # <<<<<<<<<<<<<<
+ *         CloseHandle(h_conout)
+ *     return 5
+*/
+  __pyx_t_3 = (__pyx_v_h_conout != INVALID_HANDLE_VALUE);
+
+  if (__pyx_t_3) {
+
+  } else {
+
+    __pyx_t_2 = __pyx_t_3;
+
+    goto __pyx_L27_bool_binop_done;
+  }
+  __pyx_t_3 = (__pyx_v_h_conout != NULL);
+
+
+  __pyx_t_2 = __pyx_t_3;
+
+  __pyx_L27_bool_binop_done:;
+  if (__pyx_t_2) {
+
+
+    /* "_win_console.pyx":574
+ * 
+ *     if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+ *         CloseHandle(h_conout)             # <<<<<<<<<<<<<<
+ *     return 5
+ * 
+*/
+    (void)(CloseHandle(__pyx_v_h_conout));
+
+    /* "_win_console.pyx":573
+ *             Sleep(400)
+ * 
+ *     if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:             # <<<<<<<<<<<<<<
+ *         CloseHandle(h_conout)
+ *     return 5
+*/
+  }
+
+  /* "_win_console.pyx":575
+ *     if h_conout != INVALID_HANDLE_VALUE and h_conout != NULL:
+ *         CloseHandle(h_conout)
+ *     return 5             # <<<<<<<<<<<<<<
+ * 
+ * 
+*/
+  {
+
+    __pyx_r = 5;
+  }
+  goto __pyx_L0;
+
+  /* "_win_console.pyx":509
+ * 
+ * 
+ * cdef int _check_user_typing_with_retries_c(             # <<<<<<<<<<<<<<
+ *     HANDLE h_proc,
+ *     HANDLE h_conin,
+*/
+
+  /* function exit code */
+  __pyx_L0:;
+
+
+
+
+
+
+  return __pyx_r;
+}
+
+/* "_win_console.pyx":578
  * 
  * 
  * cpdef tuple inject_console_input_verified(             # <<<<<<<<<<<<<<
@@ -5995,7 +7820,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *__pyx_v_target_pid, PyObject *__pyx_v_expected_start_time, CYTHON_UNUSED int __pyx_skip_dispatch, struct __pyx_opt_args_12_win_console_inject_console_input_verified *__pyx_optional_args) {
   PyObject *__pyx_v_text = ((PyObject*)__pyx_mstate_global->__pyx_n_u__2);
 
-  /* "_win_console.pyx":373
+  /* "_win_console.pyx":582
  *     object expected_start_time,
  *     str text = "",
  *     bint send_enter = True,             # <<<<<<<<<<<<<<
@@ -6005,14 +7830,23 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
   int __pyx_v_send_enter = ((int)1);
   double __pyx_v_submit_delay_sec = ((double)0.08);
 
-  /* "_win_console.pyx":375
+  /* "_win_console.pyx":584
  *     bint send_enter = True,
  *     double submit_delay_sec = 0.08,
  *     object allowed_images = None,             # <<<<<<<<<<<<<<
+ *     bint respect_user_typing = True,
+ * ):
+*/
+  PyObject *__pyx_v_allowed_images = ((PyObject *)Py_None);
+
+  /* "_win_console.pyx":585
+ *     double submit_delay_sec = 0.08,
+ *     object allowed_images = None,
+ *     bint respect_user_typing = True,             # <<<<<<<<<<<<<<
  * ):
  *     """
 */
-  PyObject *__pyx_v_allowed_images = ((PyObject *)Py_None);
+  int __pyx_v_respect_user_typing = ((int)1);
   PyObject *__pyx_v_allowed_set = NULL;
   DWORD __pyx_v_pid_dw;
   uint64_t __pyx_v_expected_ft;
@@ -6077,13 +7911,16 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
           __pyx_v_submit_delay_sec = __pyx_optional_args->submit_delay_sec;
           if (__pyx_optional_args->__pyx_n > 3) {
             __pyx_v_allowed_images = __pyx_optional_args->allowed_images;
+            if (__pyx_optional_args->__pyx_n > 4) {
+              __pyx_v_respect_user_typing = __pyx_optional_args->respect_user_typing;
+            }
           }
         }
       }
     }
   }
 
-  /* "_win_console.pyx":382
+  /* "_win_console.pyx":592
  *     """
  *     if (
  *         not isinstance(target_pid, int)             # <<<<<<<<<<<<<<
@@ -6103,7 +7940,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
     goto __pyx_L4_bool_binop_done;
   }
 
-  /* "_win_console.pyx":383
+  /* "_win_console.pyx":593
  *     if (
  *         not isinstance(target_pid, int)
  *         or isinstance(target_pid, bool)             # <<<<<<<<<<<<<<
@@ -6120,14 +7957,14 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
     goto __pyx_L4_bool_binop_done;
   }
 
-  /* "_win_console.pyx":384
+  /* "_win_console.pyx":594
  *         not isinstance(target_pid, int)
  *         or isinstance(target_pid, bool)
  *         or target_pid <= 0             # <<<<<<<<<<<<<<
  *         or not isinstance(expected_start_time, int)
  *         or isinstance(expected_start_time, bool)
 */
-  __pyx_t_3 = __Pyx_PyObject_CompareBoolLe_object_int(__pyx_v_target_pid, __pyx_mstate_global->__pyx_int_0, Py_LE); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 384, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyObject_CompareBoolLe_object_int(__pyx_v_target_pid, __pyx_mstate_global->__pyx_int_0, Py_LE); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 594, __pyx_L1_error)
   if (!__pyx_t_3) {
 
   } else {
@@ -6137,7 +7974,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
     goto __pyx_L4_bool_binop_done;
   }
 
-  /* "_win_console.pyx":385
+  /* "_win_console.pyx":595
  *         or isinstance(target_pid, bool)
  *         or target_pid <= 0
  *         or not isinstance(expected_start_time, int)             # <<<<<<<<<<<<<<
@@ -6157,7 +7994,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
     goto __pyx_L4_bool_binop_done;
   }
 
-  /* "_win_console.pyx":386
+  /* "_win_console.pyx":596
  *         or target_pid <= 0
  *         or not isinstance(expected_start_time, int)
  *         or isinstance(expected_start_time, bool)             # <<<<<<<<<<<<<<
@@ -6174,20 +8011,20 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
     goto __pyx_L4_bool_binop_done;
   }
 
-  /* "_win_console.pyx":387
+  /* "_win_console.pyx":597
  *         or not isinstance(expected_start_time, int)
  *         or isinstance(expected_start_time, bool)
  *         or expected_start_time <= 0             # <<<<<<<<<<<<<<
  *     ):
  *         return (False, "invalid_pid_or_start_time", 0)
 */
-  __pyx_t_2 = __Pyx_PyObject_CompareBoolLe_object_int(__pyx_v_expected_start_time, __pyx_mstate_global->__pyx_int_0, Py_LE); if (unlikely((__pyx_t_2 < 0))) __PYX_ERR(0, 387, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyObject_CompareBoolLe_object_int(__pyx_v_expected_start_time, __pyx_mstate_global->__pyx_int_0, Py_LE); if (unlikely((__pyx_t_2 < 0))) __PYX_ERR(0, 597, __pyx_L1_error)
 
   __pyx_t_1 = __pyx_t_2;
 
   __pyx_L4_bool_binop_done:;
 
-  /* "_win_console.pyx":381
+  /* "_win_console.pyx":591
  *     : (ok: bool, reason_code: str, win32_last_error: int)
  *     """
  *     if (             # <<<<<<<<<<<<<<
@@ -6197,7 +8034,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
   if (__pyx_t_1) {
 
 
-    /* "_win_console.pyx":389
+    /* "_win_console.pyx":599
  *         or expected_start_time <= 0
  *     ):
  *         return (False, "invalid_pid_or_start_time", 0)             # <<<<<<<<<<<<<<
@@ -6215,7 +8052,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
     }
     goto __pyx_L0;
 
-    /* "_win_console.pyx":381
+    /* "_win_console.pyx":591
  *     : (ok: bool, reason_code: str, win32_last_error: int)
  *     """
  *     if (             # <<<<<<<<<<<<<<
@@ -6224,7 +8061,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   }
 
-  /* "_win_console.pyx":391
+  /* "_win_console.pyx":601
  *         return (False, "invalid_pid_or_start_time", 0)
  * 
  *     allowed_set = _normalize_allowed_images(allowed_images)             # <<<<<<<<<<<<<<
@@ -6232,7 +8069,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
  *         return (False, "image_name_mismatch", 0)
 */
   __pyx_t_5 = NULL;
-  __Pyx_GetModuleGlobalName(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_normalize_allowed_images); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 391, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_normalize_allowed_images); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 601, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __pyx_t_7 = 1;
   #if CYTHON_UNPACK_METHODS
@@ -6251,13 +8088,13 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
     __pyx_t_4 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_6, __pyx_callargs+__pyx_t_7, (2-__pyx_t_7) | (__pyx_t_7*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
     __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
     __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-    if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 391, __pyx_L1_error)
+    if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 601, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
   }
   __pyx_v_allowed_set = __pyx_t_4;
   __pyx_t_4 = 0;
 
-  /* "_win_console.pyx":392
+  /* "_win_console.pyx":602
  * 
  *     allowed_set = _normalize_allowed_images(allowed_images)
  *     if allowed_set is not None and len(allowed_set) == 0:             # <<<<<<<<<<<<<<
@@ -6273,7 +8110,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 
     goto __pyx_L11_bool_binop_done;
   }
-  __pyx_t_8 = PyObject_Length(__pyx_v_allowed_set); if (unlikely(__pyx_t_8 == ((Py_ssize_t)-1))) __PYX_ERR(0, 392, __pyx_L1_error)
+  __pyx_t_8 = PyObject_Length(__pyx_v_allowed_set); if (unlikely(__pyx_t_8 == ((Py_ssize_t)-1))) __PYX_ERR(0, 602, __pyx_L1_error)
   __pyx_t_2 = (__pyx_t_8 == 0);
 
 
@@ -6284,7 +8121,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
   if (__pyx_t_1) {
 
 
-    /* "_win_console.pyx":393
+    /* "_win_console.pyx":603
  *     allowed_set = _normalize_allowed_images(allowed_images)
  *     if allowed_set is not None and len(allowed_set) == 0:
  *         return (False, "image_name_mismatch", 0)             # <<<<<<<<<<<<<<
@@ -6302,7 +8139,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
     }
     goto __pyx_L0;
 
-    /* "_win_console.pyx":392
+    /* "_win_console.pyx":602
  * 
  *     allowed_set = _normalize_allowed_images(allowed_images)
  *     if allowed_set is not None and len(allowed_set) == 0:             # <<<<<<<<<<<<<<
@@ -6311,29 +8148,29 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   }
 
-  /* "_win_console.pyx":395
+  /* "_win_console.pyx":605
  *         return (False, "image_name_mismatch", 0)
  * 
  *     cdef DWORD pid_dw = <DWORD>target_pid             # <<<<<<<<<<<<<<
  *     cdef uint64_t expected_ft = <uint64_t>expected_start_time
  *     cdef DWORD delay_ms = <DWORD>(submit_delay_sec * 1000.0) if submit_delay_sec > 0 else 0
 */
-  __pyx_t_9 = __Pyx_PyLong_As_DWORD(__pyx_v_target_pid); if (unlikely((__pyx_t_9 == ((DWORD)-1)) && PyErr_Occurred())) __PYX_ERR(0, 395, __pyx_L1_error)
+  __pyx_t_9 = __Pyx_PyLong_As_DWORD(__pyx_v_target_pid); if (unlikely((__pyx_t_9 == ((DWORD)-1)) && PyErr_Occurred())) __PYX_ERR(0, 605, __pyx_L1_error)
   __pyx_v_pid_dw = ((DWORD)__pyx_t_9);
 
 
-  /* "_win_console.pyx":396
+  /* "_win_console.pyx":606
  * 
  *     cdef DWORD pid_dw = <DWORD>target_pid
  *     cdef uint64_t expected_ft = <uint64_t>expected_start_time             # <<<<<<<<<<<<<<
  *     cdef DWORD delay_ms = <DWORD>(submit_delay_sec * 1000.0) if submit_delay_sec > 0 else 0
  *     cdef Py_ssize_t text_len = 0
 */
-  __pyx_t_10 = __Pyx_PyLong_As_uint64_t(__pyx_v_expected_start_time); if (unlikely((__pyx_t_10 == ((uint64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 396, __pyx_L1_error)
+  __pyx_t_10 = __Pyx_PyLong_As_uint64_t(__pyx_v_expected_start_time); if (unlikely((__pyx_t_10 == ((uint64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 606, __pyx_L1_error)
   __pyx_v_expected_ft = ((uint64_t)__pyx_t_10);
 
 
-  /* "_win_console.pyx":397
+  /* "_win_console.pyx":607
  *     cdef DWORD pid_dw = <DWORD>target_pid
  *     cdef uint64_t expected_ft = <uint64_t>expected_start_time
  *     cdef DWORD delay_ms = <DWORD>(submit_delay_sec * 1000.0) if submit_delay_sec > 0 else 0             # <<<<<<<<<<<<<<
@@ -6352,7 +8189,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 
   __pyx_v_delay_ms = __pyx_t_9;
 
-  /* "_win_console.pyx":398
+  /* "_win_console.pyx":608
  *     cdef uint64_t expected_ft = <uint64_t>expected_start_time
  *     cdef DWORD delay_ms = <DWORD>(submit_delay_sec * 1000.0) if submit_delay_sec > 0 else 0
  *     cdef Py_ssize_t text_len = 0             # <<<<<<<<<<<<<<
@@ -6361,7 +8198,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   __pyx_v_text_len = 0;
 
-  /* "_win_console.pyx":399
+  /* "_win_console.pyx":609
  *     cdef DWORD delay_ms = <DWORD>(submit_delay_sec * 1000.0) if submit_delay_sec > 0 else 0
  *     cdef Py_ssize_t text_len = 0
  *     cdef wchar_t* text_w = NULL             # <<<<<<<<<<<<<<
@@ -6370,7 +8207,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   __pyx_v_text_w = NULL;
 
-  /* "_win_console.pyx":401
+  /* "_win_console.pyx":611
  *     cdef wchar_t* text_w = NULL
  * 
  *     if text:             # <<<<<<<<<<<<<<
@@ -6381,14 +8218,14 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
   else
   {
     Py_ssize_t __pyx_temp = __Pyx_PyUnicode_IS_TRUE(__pyx_v_text);
-    if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 401, __pyx_L1_error)
+    if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 611, __pyx_L1_error)
     __pyx_t_1 = (__pyx_temp != 0);
   }
 
   if (__pyx_t_1) {
 
 
-    /* "_win_console.pyx":402
+    /* "_win_console.pyx":612
  * 
  *     if text:
  *         text_w = PyUnicode_AsWideCharString(text, &text_len)             # <<<<<<<<<<<<<<
@@ -6397,7 +8234,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
     __pyx_v_text_w = PyUnicode_AsWideCharString(__pyx_v_text, (&__pyx_v_text_len));
 
-    /* "_win_console.pyx":403
+    /* "_win_console.pyx":613
  *     if text:
  *         text_w = PyUnicode_AsWideCharString(text, &text_len)
  *         if text_w == NULL:             # <<<<<<<<<<<<<<
@@ -6409,7 +8246,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
     if (unlikely(__pyx_t_1)) {
 
 
-      /* "_win_console.pyx":404
+      /* "_win_console.pyx":614
  *         text_w = PyUnicode_AsWideCharString(text, &text_len)
  *         if text_w == NULL:
  *             raise MemoryError("Failed to allocate wide char string for text")             # <<<<<<<<<<<<<<
@@ -6422,14 +8259,14 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
         PyObject *__pyx_callargs[2] = {__pyx_t_6, __pyx_mstate_global->__pyx_kp_u_Failed_to_allocate_wide_char_str_2};
         __pyx_t_4 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_MemoryError)), __pyx_callargs+__pyx_t_7, (2-__pyx_t_7) | (__pyx_t_7*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
         __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
-        if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 404, __pyx_L1_error)
+        if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 614, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_4);
       }
       __Pyx_Raise(__pyx_t_4, 0, 0, 0);
       __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-      __PYX_ERR(0, 404, __pyx_L1_error)
+      __PYX_ERR(0, 614, __pyx_L1_error)
 
-      /* "_win_console.pyx":403
+      /* "_win_console.pyx":613
  *     if text:
  *         text_w = PyUnicode_AsWideCharString(text, &text_len)
  *         if text_w == NULL:             # <<<<<<<<<<<<<<
@@ -6438,7 +8275,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
     }
 
-    /* "_win_console.pyx":401
+    /* "_win_console.pyx":611
  *     cdef wchar_t* text_w = NULL
  * 
  *     if text:             # <<<<<<<<<<<<<<
@@ -6447,7 +8284,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   }
 
-  /* "_win_console.pyx":406
+  /* "_win_console.pyx":616
  *             raise MemoryError("Failed to allocate wide char string for text")
  * 
  *     cdef HANDLE h_proc = NULL             # <<<<<<<<<<<<<<
@@ -6456,7 +8293,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   __pyx_v_h_proc = NULL;
 
-  /* "_win_console.pyx":407
+  /* "_win_console.pyx":617
  * 
  *     cdef HANDLE h_proc = NULL
  *     cdef HANDLE h_conin = INVALID_HANDLE_VALUE             # <<<<<<<<<<<<<<
@@ -6465,7 +8302,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   __pyx_v_h_conin = INVALID_HANDLE_VALUE;
 
-  /* "_win_console.pyx":409
+  /* "_win_console.pyx":619
  *     cdef HANDLE h_conin = INVALID_HANDLE_VALUE
  *     cdef FILETIME c_ft, e_ft, k_ft, u_ft
  *     cdef uint64_t actual_ft = 0             # <<<<<<<<<<<<<<
@@ -6474,7 +8311,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   __pyx_v_actual_ft = 0;
 
-  /* "_win_console.pyx":411
+  /* "_win_console.pyx":621
  *     cdef uint64_t actual_ft = 0
  *     cdef WCHAR exe_buf[1024]
  *     cdef DWORD exe_len = 1024             # <<<<<<<<<<<<<<
@@ -6483,7 +8320,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   __pyx_v_exe_len = 0x400;
 
-  /* "_win_console.pyx":412
+  /* "_win_console.pyx":622
  *     cdef WCHAR exe_buf[1024]
  *     cdef DWORD exe_len = 1024
  *     cdef INPUT_RECORD* records = NULL             # <<<<<<<<<<<<<<
@@ -6492,7 +8329,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   __pyx_v_records = NULL;
 
-  /* "_win_console.pyx":414
+  /* "_win_console.pyx":624
  *     cdef INPUT_RECORD* records = NULL
  *     cdef INPUT_RECORD enter_records[2]
  *     cdef DWORD total_events = 0             # <<<<<<<<<<<<<<
@@ -6501,7 +8338,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   __pyx_v_total_events = 0;
 
-  /* "_win_console.pyx":415
+  /* "_win_console.pyx":625
  *     cdef INPUT_RECORD enter_records[2]
  *     cdef DWORD total_events = 0
  *     cdef DWORD written = 0             # <<<<<<<<<<<<<<
@@ -6510,7 +8347,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   __pyx_v_written = 0;
 
-  /* "_win_console.pyx":416
+  /* "_win_console.pyx":626
  *     cdef DWORD total_events = 0
  *     cdef DWORD written = 0
  *     cdef DWORD err_code = 0             # <<<<<<<<<<<<<<
@@ -6519,7 +8356,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   __pyx_v_err_code = 0;
 
-  /* "_win_console.pyx":417
+  /* "_win_console.pyx":627
  *     cdef DWORD written = 0
  *     cdef DWORD err_code = 0
  *     cdef WORD scan_return = 0             # <<<<<<<<<<<<<<
@@ -6528,7 +8365,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   __pyx_v_scan_return = 0;
 
-  /* "_win_console.pyx":418
+  /* "_win_console.pyx":628
  *     cdef DWORD err_code = 0
  *     cdef WORD scan_return = 0
  *     cdef Py_ssize_t i = 0             # <<<<<<<<<<<<<<
@@ -6537,7 +8374,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   __pyx_v_i = 0;
 
-  /* "_win_console.pyx":419
+  /* "_win_console.pyx":629
  *     cdef WORD scan_return = 0
  *     cdef Py_ssize_t i = 0
  *     cdef int nogil_status = 0             # <<<<<<<<<<<<<<
@@ -6546,7 +8383,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   __pyx_v_nogil_status = 0;
 
-  /* "_win_console.pyx":421
+  /* "_win_console.pyx":631
  *     cdef int nogil_status = 0
  * 
  *     try:             # <<<<<<<<<<<<<<
@@ -6555,7 +8392,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
   /*try:*/ {
 
-    /* "_win_console.pyx":423
+    /* "_win_console.pyx":633
  *     try:
  *         # [Step 1] Pin target PID in Windows kernel by holding h_proc
  *         h_proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid_dw)             # <<<<<<<<<<<<<<
@@ -6564,7 +8401,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
     __pyx_v_h_proc = OpenProcess((PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE), 0, __pyx_v_pid_dw);
 
-    /* "_win_console.pyx":424
+    /* "_win_console.pyx":634
  *         # [Step 1] Pin target PID in Windows kernel by holding h_proc
  *         h_proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid_dw)
  *         if h_proc == NULL or h_proc == INVALID_HANDLE_VALUE:             # <<<<<<<<<<<<<<
@@ -6590,25 +8427,25 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
     if (__pyx_t_1) {
 
 
-      /* "_win_console.pyx":425
+      /* "_win_console.pyx":635
  *         h_proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid_dw)
  *         if h_proc == NULL or h_proc == INVALID_HANDLE_VALUE:
  *             return (False, "open_process_failed", <int>GetLastError())             # <<<<<<<<<<<<<<
  * 
  *         try:
 */
-      __pyx_t_4 = __Pyx_PyLong_From_int(((int)GetLastError())); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 425, __pyx_L16_error)
+      __pyx_t_4 = __Pyx_PyLong_From_int(((int)GetLastError())); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 635, __pyx_L16_error)
       __Pyx_GOTREF(__pyx_t_4);
-      __pyx_t_6 = PyTuple_New(3); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 425, __pyx_L16_error)
+      __pyx_t_6 = PyTuple_New(3); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 635, __pyx_L16_error)
       __Pyx_GOTREF(__pyx_t_6);
       __Pyx_INCREF(Py_False);
       __Pyx_GIVEREF(Py_False);
-      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 0, Py_False) != (0)) __PYX_ERR(0, 425, __pyx_L16_error);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 0, Py_False) != (0)) __PYX_ERR(0, 635, __pyx_L16_error);
       __Pyx_INCREF(__pyx_mstate_global->__pyx_n_u_open_process_failed);
       __Pyx_GIVEREF(__pyx_mstate_global->__pyx_n_u_open_process_failed);
-      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 1, __pyx_mstate_global->__pyx_n_u_open_process_failed) != (0)) __PYX_ERR(0, 425, __pyx_L16_error);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 1, __pyx_mstate_global->__pyx_n_u_open_process_failed) != (0)) __PYX_ERR(0, 635, __pyx_L16_error);
       __Pyx_GIVEREF(__pyx_t_4);
-      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 2, __pyx_t_4) != (0)) __PYX_ERR(0, 425, __pyx_L16_error);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 2, __pyx_t_4) != (0)) __PYX_ERR(0, 635, __pyx_L16_error);
       __pyx_t_4 = 0;
       {
         PyObject *__pyx_temp;
@@ -6621,7 +8458,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
       __pyx_t_6 = 0;
       goto __pyx_L15_return;
 
-      /* "_win_console.pyx":424
+      /* "_win_console.pyx":634
  *         # [Step 1] Pin target PID in Windows kernel by holding h_proc
  *         h_proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid_dw)
  *         if h_proc == NULL or h_proc == INVALID_HANDLE_VALUE:             # <<<<<<<<<<<<<<
@@ -6630,7 +8467,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
     }
 
-    /* "_win_console.pyx":427
+    /* "_win_console.pyx":637
  *             return (False, "open_process_failed", <int>GetLastError())
  * 
  *         try:             # <<<<<<<<<<<<<<
@@ -6639,7 +8476,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
     /*try:*/ {
 
-      /* "_win_console.pyx":429
+      /* "_win_console.pyx":639
  *         try:
  *             # [Step 2] Non-blocking liveness check
  *             if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:             # <<<<<<<<<<<<<<
@@ -6651,7 +8488,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
       if (__pyx_t_1) {
 
 
-        /* "_win_console.pyx":430
+        /* "_win_console.pyx":640
  *             # [Step 2] Non-blocking liveness check
  *             if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
  *                 return (False, "process_already_exited", 0)             # <<<<<<<<<<<<<<
@@ -6669,7 +8506,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
         }
         goto __pyx_L21_return;
 
-        /* "_win_console.pyx":429
+        /* "_win_console.pyx":639
  *         try:
  *             # [Step 2] Non-blocking liveness check
  *             if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:             # <<<<<<<<<<<<<<
@@ -6678,7 +8515,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
       }
 
-      /* "_win_console.pyx":433
+      /* "_win_console.pyx":643
  * 
  *             # [Step 3] Exact creation time check
  *             if not GetProcessTimes(h_proc, &c_ft, &e_ft, &k_ft, &u_ft):             # <<<<<<<<<<<<<<
@@ -6690,25 +8527,25 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
       if (__pyx_t_1) {
 
 
-        /* "_win_console.pyx":434
+        /* "_win_console.pyx":644
  *             # [Step 3] Exact creation time check
  *             if not GetProcessTimes(h_proc, &c_ft, &e_ft, &k_ft, &u_ft):
  *                 return (False, "get_process_times_failed", <int>GetLastError())             # <<<<<<<<<<<<<<
  *             actual_ft = _ft_to_u64(c_ft)
  *             if actual_ft == 0 or actual_ft != expected_ft:
 */
-        __pyx_t_6 = __Pyx_PyLong_From_int(((int)GetLastError())); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 434, __pyx_L22_error)
+        __pyx_t_6 = __Pyx_PyLong_From_int(((int)GetLastError())); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 644, __pyx_L22_error)
         __Pyx_GOTREF(__pyx_t_6);
-        __pyx_t_4 = PyTuple_New(3); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 434, __pyx_L22_error)
+        __pyx_t_4 = PyTuple_New(3); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 644, __pyx_L22_error)
         __Pyx_GOTREF(__pyx_t_4);
         __Pyx_INCREF(Py_False);
         __Pyx_GIVEREF(Py_False);
-        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_4, 0, Py_False) != (0)) __PYX_ERR(0, 434, __pyx_L22_error);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_4, 0, Py_False) != (0)) __PYX_ERR(0, 644, __pyx_L22_error);
         __Pyx_INCREF(__pyx_mstate_global->__pyx_n_u_get_process_times_failed);
         __Pyx_GIVEREF(__pyx_mstate_global->__pyx_n_u_get_process_times_failed);
-        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_4, 1, __pyx_mstate_global->__pyx_n_u_get_process_times_failed) != (0)) __PYX_ERR(0, 434, __pyx_L22_error);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_4, 1, __pyx_mstate_global->__pyx_n_u_get_process_times_failed) != (0)) __PYX_ERR(0, 644, __pyx_L22_error);
         __Pyx_GIVEREF(__pyx_t_6);
-        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_4, 2, __pyx_t_6) != (0)) __PYX_ERR(0, 434, __pyx_L22_error);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_4, 2, __pyx_t_6) != (0)) __PYX_ERR(0, 644, __pyx_L22_error);
         __pyx_t_6 = 0;
         {
           PyObject *__pyx_temp;
@@ -6721,7 +8558,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
         __pyx_t_4 = 0;
         goto __pyx_L21_return;
 
-        /* "_win_console.pyx":433
+        /* "_win_console.pyx":643
  * 
  *             # [Step 3] Exact creation time check
  *             if not GetProcessTimes(h_proc, &c_ft, &e_ft, &k_ft, &u_ft):             # <<<<<<<<<<<<<<
@@ -6730,7 +8567,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
       }
 
-      /* "_win_console.pyx":435
+      /* "_win_console.pyx":645
  *             if not GetProcessTimes(h_proc, &c_ft, &e_ft, &k_ft, &u_ft):
  *                 return (False, "get_process_times_failed", <int>GetLastError())
  *             actual_ft = _ft_to_u64(c_ft)             # <<<<<<<<<<<<<<
@@ -6739,7 +8576,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
       __pyx_v_actual_ft = __pyx_f_12_win_console__ft_to_u64(__pyx_v_c_ft);
 
-      /* "_win_console.pyx":436
+      /* "_win_console.pyx":646
  *                 return (False, "get_process_times_failed", <int>GetLastError())
  *             actual_ft = _ft_to_u64(c_ft)
  *             if actual_ft == 0 or actual_ft != expected_ft:             # <<<<<<<<<<<<<<
@@ -6765,7 +8602,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
       if (__pyx_t_1) {
 
 
-        /* "_win_console.pyx":437
+        /* "_win_console.pyx":647
  *             actual_ft = _ft_to_u64(c_ft)
  *             if actual_ft == 0 or actual_ft != expected_ft:
  *                 return (False, "pid_reused_start_time_mismatch", 0)             # <<<<<<<<<<<<<<
@@ -6783,7 +8620,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
         }
         goto __pyx_L21_return;
 
-        /* "_win_console.pyx":436
+        /* "_win_console.pyx":646
  *                 return (False, "get_process_times_failed", <int>GetLastError())
  *             actual_ft = _ft_to_u64(c_ft)
  *             if actual_ft == 0 or actual_ft != expected_ft:             # <<<<<<<<<<<<<<
@@ -6792,7 +8629,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
       }
 
-      /* "_win_console.pyx":440
+      /* "_win_console.pyx":650
  * 
  *             # [Step 4] Image basename check (if allowed_images is specified)
  *             if allowed_set is not None:             # <<<<<<<<<<<<<<
@@ -6803,7 +8640,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
       if (__pyx_t_1) {
 
 
-        /* "_win_console.pyx":441
+        /* "_win_console.pyx":651
  *             # [Step 4] Image basename check (if allowed_images is specified)
  *             if allowed_set is not None:
  *                 exe_len = 1024             # <<<<<<<<<<<<<<
@@ -6812,7 +8649,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
         __pyx_v_exe_len = 0x400;
 
-        /* "_win_console.pyx":442
+        /* "_win_console.pyx":652
  *             if allowed_set is not None:
  *                 exe_len = 1024
  *                 if not QueryFullProcessImageNameW(h_proc, 0, exe_buf, &exe_len):             # <<<<<<<<<<<<<<
@@ -6824,25 +8661,25 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
         if (__pyx_t_1) {
 
 
-          /* "_win_console.pyx":443
+          /* "_win_console.pyx":653
  *                 exe_len = 1024
  *                 if not QueryFullProcessImageNameW(h_proc, 0, exe_buf, &exe_len):
  *                     return (False, "image_query_failed", <int>GetLastError())             # <<<<<<<<<<<<<<
  *                 exe_path = PyUnicode_FromWideChar(exe_buf, <Py_ssize_t>exe_len)
  *                 if os.path.basename(exe_path).lower() not in allowed_set:
 */
-          __pyx_t_4 = __Pyx_PyLong_From_int(((int)GetLastError())); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 443, __pyx_L22_error)
+          __pyx_t_4 = __Pyx_PyLong_From_int(((int)GetLastError())); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 653, __pyx_L22_error)
           __Pyx_GOTREF(__pyx_t_4);
-          __pyx_t_6 = PyTuple_New(3); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 443, __pyx_L22_error)
+          __pyx_t_6 = PyTuple_New(3); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 653, __pyx_L22_error)
           __Pyx_GOTREF(__pyx_t_6);
           __Pyx_INCREF(Py_False);
           __Pyx_GIVEREF(Py_False);
-          if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 0, Py_False) != (0)) __PYX_ERR(0, 443, __pyx_L22_error);
+          if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 0, Py_False) != (0)) __PYX_ERR(0, 653, __pyx_L22_error);
           __Pyx_INCREF(__pyx_mstate_global->__pyx_n_u_image_query_failed);
           __Pyx_GIVEREF(__pyx_mstate_global->__pyx_n_u_image_query_failed);
-          if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 1, __pyx_mstate_global->__pyx_n_u_image_query_failed) != (0)) __PYX_ERR(0, 443, __pyx_L22_error);
+          if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 1, __pyx_mstate_global->__pyx_n_u_image_query_failed) != (0)) __PYX_ERR(0, 653, __pyx_L22_error);
           __Pyx_GIVEREF(__pyx_t_4);
-          if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 2, __pyx_t_4) != (0)) __PYX_ERR(0, 443, __pyx_L22_error);
+          if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 2, __pyx_t_4) != (0)) __PYX_ERR(0, 653, __pyx_L22_error);
           __pyx_t_4 = 0;
           {
             PyObject *__pyx_temp;
@@ -6855,7 +8692,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
           __pyx_t_6 = 0;
           goto __pyx_L21_return;
 
-          /* "_win_console.pyx":442
+          /* "_win_console.pyx":652
  *             if allowed_set is not None:
  *                 exe_len = 1024
  *                 if not QueryFullProcessImageNameW(h_proc, 0, exe_buf, &exe_len):             # <<<<<<<<<<<<<<
@@ -6864,28 +8701,28 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
         }
 
-        /* "_win_console.pyx":444
+        /* "_win_console.pyx":654
  *                 if not QueryFullProcessImageNameW(h_proc, 0, exe_buf, &exe_len):
  *                     return (False, "image_query_failed", <int>GetLastError())
  *                 exe_path = PyUnicode_FromWideChar(exe_buf, <Py_ssize_t>exe_len)             # <<<<<<<<<<<<<<
  *                 if os.path.basename(exe_path).lower() not in allowed_set:
  *                     return (False, "image_name_mismatch", 0)
 */
-        __pyx_t_6 = PyUnicode_FromWideChar(__pyx_v_exe_buf, ((Py_ssize_t)__pyx_v_exe_len)); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 444, __pyx_L22_error)
+        __pyx_t_6 = PyUnicode_FromWideChar(__pyx_v_exe_buf, ((Py_ssize_t)__pyx_v_exe_len)); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 654, __pyx_L22_error)
         __Pyx_GOTREF(__pyx_t_6);
         __pyx_v_exe_path = __pyx_t_6;
         __pyx_t_6 = 0;
 
-        /* "_win_console.pyx":445
+        /* "_win_console.pyx":655
  *                     return (False, "image_query_failed", <int>GetLastError())
  *                 exe_path = PyUnicode_FromWideChar(exe_buf, <Py_ssize_t>exe_len)
  *                 if os.path.basename(exe_path).lower() not in allowed_set:             # <<<<<<<<<<<<<<
  *                     return (False, "image_name_mismatch", 0)
  * 
 */
-        __Pyx_GetModuleGlobalName(__pyx_t_12, __pyx_mstate_global->__pyx_n_u_os); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 445, __pyx_L22_error)
+        __Pyx_GetModuleGlobalName(__pyx_t_12, __pyx_mstate_global->__pyx_n_u_os); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 655, __pyx_L22_error)
         __Pyx_GOTREF(__pyx_t_12);
-        __pyx_t_13 = __Pyx_PyObject_GetAttrStr(__pyx_t_12, __pyx_mstate_global->__pyx_n_u_path); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 445, __pyx_L22_error)
+        __pyx_t_13 = __Pyx_PyObject_GetAttrStr(__pyx_t_12, __pyx_mstate_global->__pyx_n_u_path); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 655, __pyx_L22_error)
         __Pyx_GOTREF(__pyx_t_13);
         __Pyx_DECREF(__pyx_t_12); __pyx_t_12 = 0;
         __pyx_t_11 = __pyx_t_13;
@@ -6896,7 +8733,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
           __pyx_t_5 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_basename, __pyx_callargs+__pyx_t_7, (2-__pyx_t_7) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
           __Pyx_XDECREF(__pyx_t_11); __pyx_t_11 = 0;
           __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
-          if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 445, __pyx_L22_error)
+          if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 655, __pyx_L22_error)
           __Pyx_GOTREF(__pyx_t_5);
         }
         __pyx_t_4 = __pyx_t_5;
@@ -6907,15 +8744,15 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
           __pyx_t_6 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_lower, __pyx_callargs+__pyx_t_7, (1-__pyx_t_7) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
           __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
           __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-          if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 445, __pyx_L22_error)
+          if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 655, __pyx_L22_error)
           __Pyx_GOTREF(__pyx_t_6);
         }
-        __pyx_t_1 = (__Pyx_PySequence_ContainsTF(__pyx_t_6, __pyx_v_allowed_set, Py_NE)); if (unlikely((__pyx_t_1 < 0))) __PYX_ERR(0, 445, __pyx_L22_error)
+        __pyx_t_1 = (__Pyx_PySequence_ContainsTF(__pyx_t_6, __pyx_v_allowed_set, Py_NE)); if (unlikely((__pyx_t_1 < 0))) __PYX_ERR(0, 655, __pyx_L22_error)
         __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
         if (__pyx_t_1) {
 
 
-          /* "_win_console.pyx":446
+          /* "_win_console.pyx":656
  *                 exe_path = PyUnicode_FromWideChar(exe_buf, <Py_ssize_t>exe_len)
  *                 if os.path.basename(exe_path).lower() not in allowed_set:
  *                     return (False, "image_name_mismatch", 0)             # <<<<<<<<<<<<<<
@@ -6933,7 +8770,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
           }
           goto __pyx_L21_return;
 
-          /* "_win_console.pyx":445
+          /* "_win_console.pyx":655
  *                     return (False, "image_query_failed", <int>GetLastError())
  *                 exe_path = PyUnicode_FromWideChar(exe_buf, <Py_ssize_t>exe_len)
  *                 if os.path.basename(exe_path).lower() not in allowed_set:             # <<<<<<<<<<<<<<
@@ -6942,7 +8779,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
         }
 
-        /* "_win_console.pyx":440
+        /* "_win_console.pyx":650
  * 
  *             # [Step 4] Image basename check (if allowed_images is specified)
  *             if allowed_set is not None:             # <<<<<<<<<<<<<<
@@ -6951,7 +8788,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
       }
 
-      /* "_win_console.pyx":449
+      /* "_win_console.pyx":659
  * 
  *             # [Step 5] Console attach + CONIN$ write under nogil while holding h_proc
  *             with nogil:             # <<<<<<<<<<<<<<
@@ -6964,7 +8801,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
           __Pyx_FastGIL_Remember();
           /*try:*/ {
 
-            /* "_win_console.pyx":450
+            /* "_win_console.pyx":660
  *             # [Step 5] Console attach + CONIN$ write under nogil while holding h_proc
  *             with nogil:
  *                 FreeConsole()             # <<<<<<<<<<<<<<
@@ -6973,7 +8810,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
             (void)(FreeConsole());
 
-            /* "_win_console.pyx":451
+            /* "_win_console.pyx":661
  *             with nogil:
  *                 FreeConsole()
  *                 if not AttachConsole(pid_dw):             # <<<<<<<<<<<<<<
@@ -6985,7 +8822,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
             if (__pyx_t_1) {
 
 
-              /* "_win_console.pyx":452
+              /* "_win_console.pyx":662
  *                 FreeConsole()
  *                 if not AttachConsole(pid_dw):
  *                     err_code = GetLastError()             # <<<<<<<<<<<<<<
@@ -6994,7 +8831,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
               __pyx_v_err_code = GetLastError();
 
-              /* "_win_console.pyx":453
+              /* "_win_console.pyx":663
  *                 if not AttachConsole(pid_dw):
  *                     err_code = GetLastError()
  *                     AttachConsole(ATTACH_PARENT_PROCESS)             # <<<<<<<<<<<<<<
@@ -7003,7 +8840,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
               (void)(AttachConsole(ATTACH_PARENT_PROCESS));
 
-              /* "_win_console.pyx":454
+              /* "_win_console.pyx":664
  *                     err_code = GetLastError()
  *                     AttachConsole(ATTACH_PARENT_PROCESS)
  *                     nogil_status = 1  # attach_console_failed             # <<<<<<<<<<<<<<
@@ -7012,7 +8849,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
               __pyx_v_nogil_status = 1;
 
-              /* "_win_console.pyx":451
+              /* "_win_console.pyx":661
  *             with nogil:
  *                 FreeConsole()
  *                 if not AttachConsole(pid_dw):             # <<<<<<<<<<<<<<
@@ -7022,7 +8859,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
               goto __pyx_L35;
             }
 
-            /* "_win_console.pyx":456
+            /* "_win_console.pyx":666
  *                     nogil_status = 1  # attach_console_failed
  *                 else:
  *                     h_conin = CreateFileW(             # <<<<<<<<<<<<<<
@@ -7031,7 +8868,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
             /*else*/ {
 
-              /* "_win_console.pyx":463
+              /* "_win_console.pyx":673
  *                         OPEN_EXISTING,
  *                         0,
  *                         NULL,             # <<<<<<<<<<<<<<
@@ -7040,7 +8877,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
               __pyx_v_h_conin = CreateFileW(CONIN_DEVICE_NAME, (GENERIC_READ | GENERIC_WRITE), (FILE_SHARE_READ | FILE_SHARE_WRITE), NULL, OPEN_EXISTING, 0, NULL);
 
-              /* "_win_console.pyx":465
+              /* "_win_console.pyx":675
  *                         NULL,
  *                     )
  *                     if h_conin == INVALID_HANDLE_VALUE or h_conin == NULL:             # <<<<<<<<<<<<<<
@@ -7066,7 +8903,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
               if (__pyx_t_1) {
 
 
-                /* "_win_console.pyx":466
+                /* "_win_console.pyx":676
  *                     )
  *                     if h_conin == INVALID_HANDLE_VALUE or h_conin == NULL:
  *                         err_code = GetLastError()             # <<<<<<<<<<<<<<
@@ -7075,7 +8912,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                 __pyx_v_err_code = GetLastError();
 
-                /* "_win_console.pyx":467
+                /* "_win_console.pyx":677
  *                     if h_conin == INVALID_HANDLE_VALUE or h_conin == NULL:
  *                         err_code = GetLastError()
  *                         nogil_status = 2  # conin_open_failed             # <<<<<<<<<<<<<<
@@ -7084,7 +8921,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                 __pyx_v_nogil_status = 2;
 
-                /* "_win_console.pyx":465
+                /* "_win_console.pyx":675
  *                         NULL,
  *                     )
  *                     if h_conin == INVALID_HANDLE_VALUE or h_conin == NULL:             # <<<<<<<<<<<<<<
@@ -7094,7 +8931,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
                 goto __pyx_L36;
               }
 
-              /* "_win_console.pyx":468
+              /* "_win_console.pyx":678
  *                         err_code = GetLastError()
  *                         nogil_status = 2  # conin_open_failed
  *                     elif WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:             # <<<<<<<<<<<<<<
@@ -7106,16 +8943,16 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
               if (__pyx_t_1) {
 
 
-                /* "_win_console.pyx":469
+                /* "_win_console.pyx":679
  *                         nogil_status = 2  # conin_open_failed
  *                     elif WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
  *                         nogil_status = 3  # process_already_exited             # <<<<<<<<<<<<<<
  *                     else:
- *                         if text_w != NULL and text_len > 0:
+ *                         if respect_user_typing:
 */
                 __pyx_v_nogil_status = 3;
 
-                /* "_win_console.pyx":468
+                /* "_win_console.pyx":678
  *                         err_code = GetLastError()
  *                         nogil_status = 2  # conin_open_failed
  *                     elif WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:             # <<<<<<<<<<<<<<
@@ -7125,14 +8962,51 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
                 goto __pyx_L36;
               }
 
-              /* "_win_console.pyx":471
+              /* "_win_console.pyx":681
  *                         nogil_status = 3  # process_already_exited
  *                     else:
- *                         if text_w != NULL and text_len > 0:             # <<<<<<<<<<<<<<
+ *                         if respect_user_typing:             # <<<<<<<<<<<<<<
+ *                             nogil_status = _check_user_typing_with_retries_c(h_proc, h_conin, &err_code)
+ * 
+*/
+              /*else*/ {
+                if (__pyx_v_respect_user_typing) {
+
+                  /* "_win_console.pyx":682
+ *                     else:
+ *                         if respect_user_typing:
+ *                             nogil_status = _check_user_typing_with_retries_c(h_proc, h_conin, &err_code)             # <<<<<<<<<<<<<<
+ * 
+ *                         if nogil_status == 0 and text_w != NULL and text_len > 0:
+*/
+                  __pyx_v_nogil_status = __pyx_f_12_win_console__check_user_typing_with_retries_c(__pyx_v_h_proc, __pyx_v_h_conin, (&__pyx_v_err_code));
+
+                  /* "_win_console.pyx":681
+ *                         nogil_status = 3  # process_already_exited
+ *                     else:
+ *                         if respect_user_typing:             # <<<<<<<<<<<<<<
+ *                             nogil_status = _check_user_typing_with_retries_c(h_proc, h_conin, &err_code)
+ * 
+*/
+                }
+
+                /* "_win_console.pyx":684
+ *                             nogil_status = _check_user_typing_with_retries_c(h_proc, h_conin, &err_code)
+ * 
+ *                         if nogil_status == 0 and text_w != NULL and text_len > 0:             # <<<<<<<<<<<<<<
  *                             total_events = <DWORD>(text_len * 2)
  *                             records = <INPUT_RECORD*>malloc(sizeof(INPUT_RECORD) * total_events)
 */
-              /*else*/ {
+                __pyx_t_2 = (__pyx_v_nogil_status == 0);
+
+                if (__pyx_t_2) {
+
+                } else {
+
+                  __pyx_t_1 = __pyx_t_2;
+
+                  goto __pyx_L41_bool_binop_done;
+                }
                 __pyx_t_2 = (__pyx_v_text_w != NULL);
 
                 if (__pyx_t_2) {
@@ -7141,28 +9015,28 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 
                   __pyx_t_1 = __pyx_t_2;
 
-                  goto __pyx_L40_bool_binop_done;
+                  goto __pyx_L41_bool_binop_done;
                 }
                 __pyx_t_2 = (__pyx_v_text_len > 0);
 
 
                 __pyx_t_1 = __pyx_t_2;
 
-                __pyx_L40_bool_binop_done:;
+                __pyx_L41_bool_binop_done:;
                 if (__pyx_t_1) {
 
 
-                  /* "_win_console.pyx":472
- *                     else:
- *                         if text_w != NULL and text_len > 0:
+                  /* "_win_console.pyx":685
+ * 
+ *                         if nogil_status == 0 and text_w != NULL and text_len > 0:
  *                             total_events = <DWORD>(text_len * 2)             # <<<<<<<<<<<<<<
  *                             records = <INPUT_RECORD*>malloc(sizeof(INPUT_RECORD) * total_events)
  *                             if records == NULL:
 */
                   __pyx_v_total_events = ((DWORD)(__pyx_v_text_len * 2));
 
-                  /* "_win_console.pyx":473
- *                         if text_w != NULL and text_len > 0:
+                  /* "_win_console.pyx":686
+ *                         if nogil_status == 0 and text_w != NULL and text_len > 0:
  *                             total_events = <DWORD>(text_len * 2)
  *                             records = <INPUT_RECORD*>malloc(sizeof(INPUT_RECORD) * total_events)             # <<<<<<<<<<<<<<
  *                             if records == NULL:
@@ -7170,7 +9044,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                   __pyx_v_records = ((INPUT_RECORD *)malloc(((sizeof(INPUT_RECORD)) * __pyx_v_total_events)));
 
-                  /* "_win_console.pyx":474
+                  /* "_win_console.pyx":687
  *                             total_events = <DWORD>(text_len * 2)
  *                             records = <INPUT_RECORD*>malloc(sizeof(INPUT_RECORD) * total_events)
  *                             if records == NULL:             # <<<<<<<<<<<<<<
@@ -7182,7 +9056,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
                   if (__pyx_t_1) {
 
 
-                    /* "_win_console.pyx":475
+                    /* "_win_console.pyx":688
  *                             records = <INPUT_RECORD*>malloc(sizeof(INPUT_RECORD) * total_events)
  *                             if records == NULL:
  *                                 err_code = 0             # <<<<<<<<<<<<<<
@@ -7191,7 +9065,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                     __pyx_v_err_code = 0;
 
-                    /* "_win_console.pyx":476
+                    /* "_win_console.pyx":689
  *                             if records == NULL:
  *                                 err_code = 0
  *                                 nogil_status = 4  # write_console_input_failed             # <<<<<<<<<<<<<<
@@ -7200,17 +9074,17 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                     __pyx_v_nogil_status = 4;
 
-                    /* "_win_console.pyx":474
+                    /* "_win_console.pyx":687
  *                             total_events = <DWORD>(text_len * 2)
  *                             records = <INPUT_RECORD*>malloc(sizeof(INPUT_RECORD) * total_events)
  *                             if records == NULL:             # <<<<<<<<<<<<<<
  *                                 err_code = 0
  *                                 nogil_status = 4  # write_console_input_failed
 */
-                    goto __pyx_L42;
+                    goto __pyx_L44;
                   }
 
-                  /* "_win_console.pyx":478
+                  /* "_win_console.pyx":691
  *                                 nogil_status = 4  # write_console_input_failed
  *                             else:
  *                                 for i in range(text_len):             # <<<<<<<<<<<<<<
@@ -7225,7 +9099,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
                     for (__pyx_t_15 = 0; __pyx_t_15 < __pyx_t_14; __pyx_t_15+=1) {
                       __pyx_v_i = __pyx_t_15;
 
-                      /* "_win_console.pyx":479
+                      /* "_win_console.pyx":692
  *                             else:
  *                                 for i in range(text_len):
  *                                     _init_key_record(&records[i * 2], text_w[i], 0, 0, 1)             # <<<<<<<<<<<<<<
@@ -7234,7 +9108,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                       __pyx_f_12_win_console__init_key_record((&(__pyx_v_records[(__pyx_v_i * 2)])), (__pyx_v_text_w[__pyx_v_i]), 0, 0, 1);
 
-                      /* "_win_console.pyx":480
+                      /* "_win_console.pyx":693
  *                                 for i in range(text_len):
  *                                     _init_key_record(&records[i * 2], text_w[i], 0, 0, 1)
  *                                     _init_key_record(&records[i * 2 + 1], text_w[i], 0, 0, 0)             # <<<<<<<<<<<<<<
@@ -7245,7 +9119,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
                     }
 
 
-                    /* "_win_console.pyx":482
+                    /* "_win_console.pyx":695
  *                                     _init_key_record(&records[i * 2 + 1], text_w[i], 0, 0, 0)
  * 
  *                                 if not WriteConsoleInputW(h_conin, records, total_events, &written):             # <<<<<<<<<<<<<<
@@ -7257,7 +9131,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
                     if (__pyx_t_1) {
 
 
-                      /* "_win_console.pyx":483
+                      /* "_win_console.pyx":696
  * 
  *                                 if not WriteConsoleInputW(h_conin, records, total_events, &written):
  *                                     err_code = GetLastError()             # <<<<<<<<<<<<<<
@@ -7266,7 +9140,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                       __pyx_v_err_code = GetLastError();
 
-                      /* "_win_console.pyx":484
+                      /* "_win_console.pyx":697
  *                                 if not WriteConsoleInputW(h_conin, records, total_events, &written):
  *                                     err_code = GetLastError()
  *                                     nogil_status = 4  # write_console_input_failed             # <<<<<<<<<<<<<<
@@ -7275,7 +9149,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                       __pyx_v_nogil_status = 4;
 
-                      /* "_win_console.pyx":482
+                      /* "_win_console.pyx":695
  *                                     _init_key_record(&records[i * 2 + 1], text_w[i], 0, 0, 0)
  * 
  *                                 if not WriteConsoleInputW(h_conin, records, total_events, &written):             # <<<<<<<<<<<<<<
@@ -7284,18 +9158,18 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                     }
                   }
-                  __pyx_L42:;
+                  __pyx_L44:;
 
-                  /* "_win_console.pyx":471
- *                         nogil_status = 3  # process_already_exited
- *                     else:
- *                         if text_w != NULL and text_len > 0:             # <<<<<<<<<<<<<<
+                  /* "_win_console.pyx":684
+ *                             nogil_status = _check_user_typing_with_retries_c(h_proc, h_conin, &err_code)
+ * 
+ *                         if nogil_status == 0 and text_w != NULL and text_len > 0:             # <<<<<<<<<<<<<<
  *                             total_events = <DWORD>(text_len * 2)
  *                             records = <INPUT_RECORD*>malloc(sizeof(INPUT_RECORD) * total_events)
 */
                 }
 
-                /* "_win_console.pyx":486
+                /* "_win_console.pyx":699
  *                                     nogil_status = 4  # write_console_input_failed
  * 
  *                         if nogil_status == 0 and send_enter:             # <<<<<<<<<<<<<<
@@ -7310,15 +9184,15 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 
                   __pyx_t_1 = __pyx_t_2;
 
-                  goto __pyx_L47_bool_binop_done;
+                  goto __pyx_L49_bool_binop_done;
                 }
 
                 __pyx_t_1 = __pyx_v_send_enter;
-                __pyx_L47_bool_binop_done:;
+                __pyx_L49_bool_binop_done:;
                 if (__pyx_t_1) {
 
 
-                  /* "_win_console.pyx":487
+                  /* "_win_console.pyx":700
  * 
  *                         if nogil_status == 0 and send_enter:
  *                             if delay_ms > 0:             # <<<<<<<<<<<<<<
@@ -7330,7 +9204,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
                   if (__pyx_t_1) {
 
 
-                    /* "_win_console.pyx":488
+                    /* "_win_console.pyx":701
  *                         if nogil_status == 0 and send_enter:
  *                             if delay_ms > 0:
  *                                 Sleep(delay_ms)             # <<<<<<<<<<<<<<
@@ -7339,7 +9213,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                     Sleep(__pyx_v_delay_ms);
 
-                    /* "_win_console.pyx":487
+                    /* "_win_console.pyx":700
  * 
  *                         if nogil_status == 0 and send_enter:
  *                             if delay_ms > 0:             # <<<<<<<<<<<<<<
@@ -7348,7 +9222,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                   }
 
-                  /* "_win_console.pyx":490
+                  /* "_win_console.pyx":703
  *                                 Sleep(delay_ms)
  * 
  *                             scan_return = <WORD>MapVirtualKeyW(VK_RETURN, MAPVK_VK_TO_VSC)             # <<<<<<<<<<<<<<
@@ -7357,7 +9231,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                   __pyx_v_scan_return = ((WORD)MapVirtualKeyW(VK_RETURN, MAPVK_VK_TO_VSC));
 
-                  /* "_win_console.pyx":491
+                  /* "_win_console.pyx":704
  * 
  *                             scan_return = <WORD>MapVirtualKeyW(VK_RETURN, MAPVK_VK_TO_VSC)
  *                             _init_key_record(&enter_records[0], WCHAR_CR, VK_RETURN, scan_return, 1)             # <<<<<<<<<<<<<<
@@ -7366,7 +9240,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                   __pyx_f_12_win_console__init_key_record((&(__pyx_v_enter_records[0])), WCHAR_CR, VK_RETURN, __pyx_v_scan_return, 1);
 
-                  /* "_win_console.pyx":492
+                  /* "_win_console.pyx":705
  *                             scan_return = <WORD>MapVirtualKeyW(VK_RETURN, MAPVK_VK_TO_VSC)
  *                             _init_key_record(&enter_records[0], WCHAR_CR, VK_RETURN, scan_return, 1)
  *                             _init_key_record(&enter_records[1], WCHAR_CR, VK_RETURN, scan_return, 0)             # <<<<<<<<<<<<<<
@@ -7375,7 +9249,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                   __pyx_f_12_win_console__init_key_record((&(__pyx_v_enter_records[1])), WCHAR_CR, VK_RETURN, __pyx_v_scan_return, 0);
 
-                  /* "_win_console.pyx":494
+                  /* "_win_console.pyx":707
  *                             _init_key_record(&enter_records[1], WCHAR_CR, VK_RETURN, scan_return, 0)
  * 
  *                             if not WriteConsoleInputW(h_conin, enter_records, 2, &written):             # <<<<<<<<<<<<<<
@@ -7387,7 +9261,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
                   if (__pyx_t_1) {
 
 
-                    /* "_win_console.pyx":495
+                    /* "_win_console.pyx":708
  * 
  *                             if not WriteConsoleInputW(h_conin, enter_records, 2, &written):
  *                                 err_code = GetLastError()             # <<<<<<<<<<<<<<
@@ -7396,7 +9270,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                     __pyx_v_err_code = GetLastError();
 
-                    /* "_win_console.pyx":496
+                    /* "_win_console.pyx":709
  *                             if not WriteConsoleInputW(h_conin, enter_records, 2, &written):
  *                                 err_code = GetLastError()
  *                                 nogil_status = 4  # write_console_input_failed             # <<<<<<<<<<<<<<
@@ -7405,7 +9279,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                     __pyx_v_nogil_status = 4;
 
-                    /* "_win_console.pyx":494
+                    /* "_win_console.pyx":707
  *                             _init_key_record(&enter_records[1], WCHAR_CR, VK_RETURN, scan_return, 0)
  * 
  *                             if not WriteConsoleInputW(h_conin, enter_records, 2, &written):             # <<<<<<<<<<<<<<
@@ -7414,7 +9288,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                   }
 
-                  /* "_win_console.pyx":486
+                  /* "_win_console.pyx":699
  *                                     nogil_status = 4  # write_console_input_failed
  * 
  *                         if nogil_status == 0 and send_enter:             # <<<<<<<<<<<<<<
@@ -7425,7 +9299,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
               }
               __pyx_L36:;
 
-              /* "_win_console.pyx":498
+              /* "_win_console.pyx":711
  *                                 nogil_status = 4  # write_console_input_failed
  * 
  *                     if records != NULL:             # <<<<<<<<<<<<<<
@@ -7437,7 +9311,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
               if (__pyx_t_1) {
 
 
-                /* "_win_console.pyx":499
+                /* "_win_console.pyx":712
  * 
  *                     if records != NULL:
  *                         free(records)             # <<<<<<<<<<<<<<
@@ -7446,7 +9320,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                 free(__pyx_v_records);
 
-                /* "_win_console.pyx":500
+                /* "_win_console.pyx":713
  *                     if records != NULL:
  *                         free(records)
  *                         records = NULL             # <<<<<<<<<<<<<<
@@ -7455,7 +9329,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                 __pyx_v_records = NULL;
 
-                /* "_win_console.pyx":498
+                /* "_win_console.pyx":711
  *                                 nogil_status = 4  # write_console_input_failed
  * 
  *                     if records != NULL:             # <<<<<<<<<<<<<<
@@ -7464,7 +9338,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
               }
 
-              /* "_win_console.pyx":501
+              /* "_win_console.pyx":714
  *                         free(records)
  *                         records = NULL
  *                     if h_conin != INVALID_HANDLE_VALUE and h_conin != NULL:             # <<<<<<<<<<<<<<
@@ -7479,18 +9353,18 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 
                 __pyx_t_1 = __pyx_t_2;
 
-                goto __pyx_L53_bool_binop_done;
+                goto __pyx_L55_bool_binop_done;
               }
               __pyx_t_2 = (__pyx_v_h_conin != NULL);
 
 
               __pyx_t_1 = __pyx_t_2;
 
-              __pyx_L53_bool_binop_done:;
+              __pyx_L55_bool_binop_done:;
               if (__pyx_t_1) {
 
 
-                /* "_win_console.pyx":502
+                /* "_win_console.pyx":715
  *                         records = NULL
  *                     if h_conin != INVALID_HANDLE_VALUE and h_conin != NULL:
  *                         CloseHandle(h_conin)             # <<<<<<<<<<<<<<
@@ -7499,7 +9373,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                 (void)(CloseHandle(__pyx_v_h_conin));
 
-                /* "_win_console.pyx":503
+                /* "_win_console.pyx":716
  *                     if h_conin != INVALID_HANDLE_VALUE and h_conin != NULL:
  *                         CloseHandle(h_conin)
  *                         h_conin = INVALID_HANDLE_VALUE             # <<<<<<<<<<<<<<
@@ -7508,7 +9382,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
                 __pyx_v_h_conin = INVALID_HANDLE_VALUE;
 
-                /* "_win_console.pyx":501
+                /* "_win_console.pyx":714
  *                         free(records)
  *                         records = NULL
  *                     if h_conin != INVALID_HANDLE_VALUE and h_conin != NULL:             # <<<<<<<<<<<<<<
@@ -7517,7 +9391,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
               }
 
-              /* "_win_console.pyx":504
+              /* "_win_console.pyx":717
  *                         CloseHandle(h_conin)
  *                         h_conin = INVALID_HANDLE_VALUE
  *                     FreeConsole()             # <<<<<<<<<<<<<<
@@ -7526,7 +9400,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
               (void)(FreeConsole());
 
-              /* "_win_console.pyx":505
+              /* "_win_console.pyx":718
  *                         h_conin = INVALID_HANDLE_VALUE
  *                     FreeConsole()
  *                     AttachConsole(ATTACH_PARENT_PROCESS)             # <<<<<<<<<<<<<<
@@ -7538,7 +9412,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
             __pyx_L35:;
           }
 
-          /* "_win_console.pyx":449
+          /* "_win_console.pyx":659
  * 
  *             # [Step 5] Console attach + CONIN$ write under nogil while holding h_proc
  *             with nogil:             # <<<<<<<<<<<<<<
@@ -7555,7 +9429,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
           }
       }
 
-      /* "_win_console.pyx":507
+      /* "_win_console.pyx":720
  *                     AttachConsole(ATTACH_PARENT_PROCESS)
  * 
  *             if nogil_status == 1:             # <<<<<<<<<<<<<<
@@ -7565,25 +9439,25 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
       switch (__pyx_v_nogil_status) {
         case 1:
 
-        /* "_win_console.pyx":508
+        /* "_win_console.pyx":721
  * 
  *             if nogil_status == 1:
  *                 return (False, "attach_console_failed", <int>err_code)             # <<<<<<<<<<<<<<
  *             elif nogil_status == 2:
  *                 return (False, "conin_open_failed", <int>err_code)
 */
-        __pyx_t_6 = __Pyx_PyLong_From_int(((int)__pyx_v_err_code)); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 508, __pyx_L22_error)
+        __pyx_t_6 = __Pyx_PyLong_From_int(((int)__pyx_v_err_code)); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 721, __pyx_L22_error)
         __Pyx_GOTREF(__pyx_t_6);
-        __pyx_t_5 = PyTuple_New(3); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 508, __pyx_L22_error)
+        __pyx_t_5 = PyTuple_New(3); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 721, __pyx_L22_error)
         __Pyx_GOTREF(__pyx_t_5);
         __Pyx_INCREF(Py_False);
         __Pyx_GIVEREF(Py_False);
-        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_5, 0, Py_False) != (0)) __PYX_ERR(0, 508, __pyx_L22_error);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_5, 0, Py_False) != (0)) __PYX_ERR(0, 721, __pyx_L22_error);
         __Pyx_INCREF(__pyx_mstate_global->__pyx_n_u_attach_console_failed);
         __Pyx_GIVEREF(__pyx_mstate_global->__pyx_n_u_attach_console_failed);
-        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_5, 1, __pyx_mstate_global->__pyx_n_u_attach_console_failed) != (0)) __PYX_ERR(0, 508, __pyx_L22_error);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_5, 1, __pyx_mstate_global->__pyx_n_u_attach_console_failed) != (0)) __PYX_ERR(0, 721, __pyx_L22_error);
         __Pyx_GIVEREF(__pyx_t_6);
-        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_5, 2, __pyx_t_6) != (0)) __PYX_ERR(0, 508, __pyx_L22_error);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_5, 2, __pyx_t_6) != (0)) __PYX_ERR(0, 721, __pyx_L22_error);
         __pyx_t_6 = 0;
         {
           PyObject *__pyx_temp;
@@ -7596,7 +9470,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
         __pyx_t_5 = 0;
         goto __pyx_L21_return;
 
-        /* "_win_console.pyx":507
+        /* "_win_console.pyx":720
  *                     AttachConsole(ATTACH_PARENT_PROCESS)
  * 
  *             if nogil_status == 1:             # <<<<<<<<<<<<<<
@@ -7606,25 +9480,25 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
         break;
         case 2:
 
-        /* "_win_console.pyx":510
+        /* "_win_console.pyx":723
  *                 return (False, "attach_console_failed", <int>err_code)
  *             elif nogil_status == 2:
  *                 return (False, "conin_open_failed", <int>err_code)             # <<<<<<<<<<<<<<
  *             elif nogil_status == 3:
  *                 return (False, "process_already_exited", 0)
 */
-        __pyx_t_5 = __Pyx_PyLong_From_int(((int)__pyx_v_err_code)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 510, __pyx_L22_error)
+        __pyx_t_5 = __Pyx_PyLong_From_int(((int)__pyx_v_err_code)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 723, __pyx_L22_error)
         __Pyx_GOTREF(__pyx_t_5);
-        __pyx_t_6 = PyTuple_New(3); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 510, __pyx_L22_error)
+        __pyx_t_6 = PyTuple_New(3); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 723, __pyx_L22_error)
         __Pyx_GOTREF(__pyx_t_6);
         __Pyx_INCREF(Py_False);
         __Pyx_GIVEREF(Py_False);
-        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 0, Py_False) != (0)) __PYX_ERR(0, 510, __pyx_L22_error);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 0, Py_False) != (0)) __PYX_ERR(0, 723, __pyx_L22_error);
         __Pyx_INCREF(__pyx_mstate_global->__pyx_n_u_conin_open_failed);
         __Pyx_GIVEREF(__pyx_mstate_global->__pyx_n_u_conin_open_failed);
-        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 1, __pyx_mstate_global->__pyx_n_u_conin_open_failed) != (0)) __PYX_ERR(0, 510, __pyx_L22_error);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 1, __pyx_mstate_global->__pyx_n_u_conin_open_failed) != (0)) __PYX_ERR(0, 723, __pyx_L22_error);
         __Pyx_GIVEREF(__pyx_t_5);
-        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 2, __pyx_t_5) != (0)) __PYX_ERR(0, 510, __pyx_L22_error);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 2, __pyx_t_5) != (0)) __PYX_ERR(0, 723, __pyx_L22_error);
         __pyx_t_5 = 0;
         {
           PyObject *__pyx_temp;
@@ -7637,7 +9511,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
         __pyx_t_6 = 0;
         goto __pyx_L21_return;
 
-        /* "_win_console.pyx":509
+        /* "_win_console.pyx":722
  *             if nogil_status == 1:
  *                 return (False, "attach_console_failed", <int>err_code)
  *             elif nogil_status == 2:             # <<<<<<<<<<<<<<
@@ -7647,7 +9521,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
         break;
         case 3:
 
-        /* "_win_console.pyx":512
+        /* "_win_console.pyx":725
  *                 return (False, "conin_open_failed", <int>err_code)
  *             elif nogil_status == 3:
  *                 return (False, "process_already_exited", 0)             # <<<<<<<<<<<<<<
@@ -7665,7 +9539,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
         }
         goto __pyx_L21_return;
 
-        /* "_win_console.pyx":511
+        /* "_win_console.pyx":724
  *             elif nogil_status == 2:
  *                 return (False, "conin_open_failed", <int>err_code)
  *             elif nogil_status == 3:             # <<<<<<<<<<<<<<
@@ -7675,25 +9549,25 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
         break;
         case 4:
 
-        /* "_win_console.pyx":514
+        /* "_win_console.pyx":727
  *                 return (False, "process_already_exited", 0)
  *             elif nogil_status == 4:
  *                 return (False, "write_console_input_failed", <int>err_code)             # <<<<<<<<<<<<<<
- *             return (True, "ok", 0)
- *         finally:
+ *             elif nogil_status == 5:
+ *                 return (False, "deferred_user_typing", 0)
 */
-        __pyx_t_6 = __Pyx_PyLong_From_int(((int)__pyx_v_err_code)); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 514, __pyx_L22_error)
+        __pyx_t_6 = __Pyx_PyLong_From_int(((int)__pyx_v_err_code)); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 727, __pyx_L22_error)
         __Pyx_GOTREF(__pyx_t_6);
-        __pyx_t_5 = PyTuple_New(3); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 514, __pyx_L22_error)
+        __pyx_t_5 = PyTuple_New(3); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 727, __pyx_L22_error)
         __Pyx_GOTREF(__pyx_t_5);
         __Pyx_INCREF(Py_False);
         __Pyx_GIVEREF(Py_False);
-        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_5, 0, Py_False) != (0)) __PYX_ERR(0, 514, __pyx_L22_error);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_5, 0, Py_False) != (0)) __PYX_ERR(0, 727, __pyx_L22_error);
         __Pyx_INCREF(__pyx_mstate_global->__pyx_n_u_write_console_input_failed);
         __Pyx_GIVEREF(__pyx_mstate_global->__pyx_n_u_write_console_input_failed);
-        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_5, 1, __pyx_mstate_global->__pyx_n_u_write_console_input_failed) != (0)) __PYX_ERR(0, 514, __pyx_L22_error);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_5, 1, __pyx_mstate_global->__pyx_n_u_write_console_input_failed) != (0)) __PYX_ERR(0, 727, __pyx_L22_error);
         __Pyx_GIVEREF(__pyx_t_6);
-        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_5, 2, __pyx_t_6) != (0)) __PYX_ERR(0, 514, __pyx_L22_error);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_5, 2, __pyx_t_6) != (0)) __PYX_ERR(0, 727, __pyx_L22_error);
         __pyx_t_6 = 0;
         {
           PyObject *__pyx_temp;
@@ -7706,20 +9580,89 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
         __pyx_t_5 = 0;
         goto __pyx_L21_return;
 
-        /* "_win_console.pyx":513
+        /* "_win_console.pyx":726
  *             elif nogil_status == 3:
  *                 return (False, "process_already_exited", 0)
  *             elif nogil_status == 4:             # <<<<<<<<<<<<<<
  *                 return (False, "write_console_input_failed", <int>err_code)
+ *             elif nogil_status == 5:
+*/
+        break;
+        case 5:
+
+        /* "_win_console.pyx":729
+ *                 return (False, "write_console_input_failed", <int>err_code)
+ *             elif nogil_status == 5:
+ *                 return (False, "deferred_user_typing", 0)             # <<<<<<<<<<<<<<
+ *             elif nogil_status == 6:
+ *                 return (False, "user_typing_check_failed", <int>err_code)
+*/
+        {
+          PyObject *__pyx_temp;
+          {
+            __pyx_temp = __pyx_r;
+            __Pyx_INCREF(__pyx_mstate_global->__pyx_tuple[4]);
+            __pyx_r = __pyx_mstate_global->__pyx_tuple[4];
+          }
+          __Pyx_XDECREF(__pyx_temp);
+        }
+        goto __pyx_L21_return;
+
+        /* "_win_console.pyx":728
+ *             elif nogil_status == 4:
+ *                 return (False, "write_console_input_failed", <int>err_code)
+ *             elif nogil_status == 5:             # <<<<<<<<<<<<<<
+ *                 return (False, "deferred_user_typing", 0)
+ *             elif nogil_status == 6:
+*/
+        break;
+        case 6:
+
+        /* "_win_console.pyx":731
+ *                 return (False, "deferred_user_typing", 0)
+ *             elif nogil_status == 6:
+ *                 return (False, "user_typing_check_failed", <int>err_code)             # <<<<<<<<<<<<<<
+ *             return (True, "ok", 0)
+ *         finally:
+*/
+        __pyx_t_5 = __Pyx_PyLong_From_int(((int)__pyx_v_err_code)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 731, __pyx_L22_error)
+        __Pyx_GOTREF(__pyx_t_5);
+        __pyx_t_6 = PyTuple_New(3); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 731, __pyx_L22_error)
+        __Pyx_GOTREF(__pyx_t_6);
+        __Pyx_INCREF(Py_False);
+        __Pyx_GIVEREF(Py_False);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 0, Py_False) != (0)) __PYX_ERR(0, 731, __pyx_L22_error);
+        __Pyx_INCREF(__pyx_mstate_global->__pyx_n_u_user_typing_check_failed);
+        __Pyx_GIVEREF(__pyx_mstate_global->__pyx_n_u_user_typing_check_failed);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 1, __pyx_mstate_global->__pyx_n_u_user_typing_check_failed) != (0)) __PYX_ERR(0, 731, __pyx_L22_error);
+        __Pyx_GIVEREF(__pyx_t_5);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 2, __pyx_t_5) != (0)) __PYX_ERR(0, 731, __pyx_L22_error);
+        __pyx_t_5 = 0;
+        {
+          PyObject *__pyx_temp;
+          {
+            __pyx_temp = __pyx_r;
+            __pyx_r = ((PyObject*)__pyx_t_6);
+          }
+          __Pyx_XDECREF(__pyx_temp);
+        }
+        __pyx_t_6 = 0;
+        goto __pyx_L21_return;
+
+        /* "_win_console.pyx":730
+ *             elif nogil_status == 5:
+ *                 return (False, "deferred_user_typing", 0)
+ *             elif nogil_status == 6:             # <<<<<<<<<<<<<<
+ *                 return (False, "user_typing_check_failed", <int>err_code)
  *             return (True, "ok", 0)
 */
         break;
         default: break;
       }
 
-      /* "_win_console.pyx":515
- *             elif nogil_status == 4:
- *                 return (False, "write_console_input_failed", <int>err_code)
+      /* "_win_console.pyx":732
+ *             elif nogil_status == 6:
+ *                 return (False, "user_typing_check_failed", <int>err_code)
  *             return (True, "ok", 0)             # <<<<<<<<<<<<<<
  *         finally:
  *             CloseHandle(h_proc)
@@ -7728,15 +9671,15 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
         PyObject *__pyx_temp;
         {
           __pyx_temp = __pyx_r;
-          __Pyx_INCREF(__pyx_mstate_global->__pyx_tuple[4]);
-          __pyx_r = __pyx_mstate_global->__pyx_tuple[4];
+          __Pyx_INCREF(__pyx_mstate_global->__pyx_tuple[5]);
+          __pyx_r = __pyx_mstate_global->__pyx_tuple[5];
         }
         __Pyx_XDECREF(__pyx_temp);
       }
       goto __pyx_L21_return;
     }
 
-    /* "_win_console.pyx":517
+    /* "_win_console.pyx":734
  *             return (True, "ok", 0)
  *         finally:
  *             CloseHandle(h_proc)             # <<<<<<<<<<<<<<
@@ -7790,7 +9733,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
     }
   }
 
-  /* "_win_console.pyx":519
+  /* "_win_console.pyx":736
  *             CloseHandle(h_proc)
  *     finally:
  *         if text_w != NULL:             # <<<<<<<<<<<<<<
@@ -7824,7 +9767,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
         if (__pyx_t_1) {
 
 
-          /* "_win_console.pyx":520
+          /* "_win_console.pyx":737
  *     finally:
  *         if text_w != NULL:
  *             PyMem_Free(text_w)             # <<<<<<<<<<<<<<
@@ -7833,7 +9776,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
           PyMem_Free(__pyx_v_text_w);
 
-          /* "_win_console.pyx":519
+          /* "_win_console.pyx":736
  *             CloseHandle(h_proc)
  *     finally:
  *         if text_w != NULL:             # <<<<<<<<<<<<<<
@@ -7862,7 +9805,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
       if (__pyx_t_1) {
 
 
-        /* "_win_console.pyx":520
+        /* "_win_console.pyx":737
  *     finally:
  *         if text_w != NULL:
  *             PyMem_Free(text_w)             # <<<<<<<<<<<<<<
@@ -7871,7 +9814,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
 */
         PyMem_Free(__pyx_v_text_w);
 
-        /* "_win_console.pyx":519
+        /* "_win_console.pyx":736
  *             CloseHandle(h_proc)
  *     finally:
  *         if text_w != NULL:             # <<<<<<<<<<<<<<
@@ -7885,7 +9828,7 @@ static PyObject *__pyx_f_12_win_console_inject_console_input_verified(PyObject *
     }
   }
 
-  /* "_win_console.pyx":369
+  /* "_win_console.pyx":578
  * 
  * 
  * cpdef tuple inject_console_input_verified(             # <<<<<<<<<<<<<<
@@ -7956,11 +9899,12 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   int __pyx_v_send_enter;
   double __pyx_v_submit_delay_sec;
   PyObject *__pyx_v_allowed_images = 0;
+  int __pyx_v_respect_user_typing;
   #if !CYTHON_VECTORCALL
   CYTHON_UNUSED Py_ssize_t __pyx_nargs;
   #endif
   CYTHON_UNUSED PyObject *const *__pyx_kwvalues;
-  PyObject* values[6] = {0,0,0,0,0,0};
+  PyObject* values[7] = {0,0,0,0,0,0,0};
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
@@ -7976,76 +9920,84 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   #endif
   __pyx_kwvalues = __Pyx_KwValues_FASTCALL(__pyx_args, __pyx_nargs);
   {
-    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_target_pid,&__pyx_mstate_global->__pyx_n_u_expected_start_time,&__pyx_mstate_global->__pyx_n_u_text,&__pyx_mstate_global->__pyx_n_u_send_enter,&__pyx_mstate_global->__pyx_n_u_submit_delay_sec,&__pyx_mstate_global->__pyx_n_u_allowed_images,0};
+    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_target_pid,&__pyx_mstate_global->__pyx_n_u_expected_start_time,&__pyx_mstate_global->__pyx_n_u_text,&__pyx_mstate_global->__pyx_n_u_send_enter,&__pyx_mstate_global->__pyx_n_u_submit_delay_sec,&__pyx_mstate_global->__pyx_n_u_allowed_images,&__pyx_mstate_global->__pyx_n_u_respect_user_typing,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len < 0)) __PYX_ERR(0, 369, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len < 0)) __PYX_ERR(0, 578, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
+        case  7:
+        values[6] = __Pyx_ArgRef_FASTCALL(__pyx_args, 6);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[6])) __PYX_ERR(0, 578, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
         case  6:
         values[5] = __Pyx_ArgRef_FASTCALL(__pyx_args, 5);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 369, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 578, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  5:
         values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 369, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 578, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  4:
         values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 369, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 578, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 369, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 578, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 369, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 578, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 369, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 578, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "inject_console_input_verified", 0) < (0)) __PYX_ERR(0, 369, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "inject_console_input_verified", 0) < (0)) __PYX_ERR(0, 578, __pyx_L3_error)
       if (!values[2]) values[2] = __Pyx_NewRef(((PyObject*)__pyx_mstate_global->__pyx_n_u__2));
 
-      /* "_win_console.pyx":375
+      /* "_win_console.pyx":584
  *     bint send_enter = True,
  *     double submit_delay_sec = 0.08,
  *     object allowed_images = None,             # <<<<<<<<<<<<<<
+ *     bint respect_user_typing = True,
  * ):
- *     """
 */
       if (!values[5]) values[5] = __Pyx_NewRef(((PyObject *)Py_None));
       for (Py_ssize_t i = __pyx_nargs; i < 2; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("inject_console_input_verified", 0, 2, 6, i); __PYX_ERR(0, 369, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("inject_console_input_verified", 0, 2, 7, i); __PYX_ERR(0, 578, __pyx_L3_error) }
       }
     } else {
       switch (__pyx_nargs) {
+        case  7:
+        values[6] = __Pyx_ArgRef_FASTCALL(__pyx_args, 6);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[6])) __PYX_ERR(0, 578, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
         case  6:
         values[5] = __Pyx_ArgRef_FASTCALL(__pyx_args, 5);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 369, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 578, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  5:
         values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 369, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 578, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  4:
         values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 369, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 578, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 369, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 578, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 369, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 578, __pyx_L3_error)
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 369, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 578, __pyx_L3_error)
         break;
         default: goto __pyx_L5_argtuple_error;
       }
@@ -8056,10 +10008,10 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
     __pyx_v_expected_start_time = values[1];
     __pyx_v_text = ((PyObject*)values[2]);
     if (values[3]) {
-      __pyx_v_send_enter = __Pyx_PyObject_IsTrue(values[3]); if (unlikely((__pyx_v_send_enter == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 373, __pyx_L3_error)
+      __pyx_v_send_enter = __Pyx_PyObject_IsTrue(values[3]); if (unlikely((__pyx_v_send_enter == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 582, __pyx_L3_error)
     } else {
 
-      /* "_win_console.pyx":373
+      /* "_win_console.pyx":582
  *     object expected_start_time,
  *     str text = "",
  *     bint send_enter = True,             # <<<<<<<<<<<<<<
@@ -8069,15 +10021,28 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
       __pyx_v_send_enter = ((int)1);
     }
     if (values[4]) {
-      __pyx_v_submit_delay_sec = __Pyx_PyFloat_AsDouble(values[4]); if (unlikely((__pyx_v_submit_delay_sec == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 374, __pyx_L3_error)
+      __pyx_v_submit_delay_sec = __Pyx_PyFloat_AsDouble(values[4]); if (unlikely((__pyx_v_submit_delay_sec == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 583, __pyx_L3_error)
     } else {
       __pyx_v_submit_delay_sec = ((double)0.08);
     }
     __pyx_v_allowed_images = values[5];
+    if (values[6]) {
+      __pyx_v_respect_user_typing = __Pyx_PyObject_IsTrue(values[6]); if (unlikely((__pyx_v_respect_user_typing == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 585, __pyx_L3_error)
+    } else {
+
+      /* "_win_console.pyx":585
+ *     double submit_delay_sec = 0.08,
+ *     object allowed_images = None,
+ *     bint respect_user_typing = True,             # <<<<<<<<<<<<<<
+ * ):
+ *     """
+*/
+      __pyx_v_respect_user_typing = ((int)1);
+    }
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("inject_console_input_verified", 0, 2, 6, __pyx_nargs); __PYX_ERR(0, 369, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("inject_console_input_verified", 0, 2, 7, __pyx_nargs); __PYX_ERR(0, 578, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -8088,10 +10053,10 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_text), (&PyUnicode_Type), 1, "text", 1))) __PYX_ERR(0, 372, __pyx_L1_error)
-  __pyx_r = __pyx_pf_12_win_console_8inject_console_input_verified(__pyx_self, __pyx_v_target_pid, __pyx_v_expected_start_time, __pyx_v_text, __pyx_v_send_enter, __pyx_v_submit_delay_sec, __pyx_v_allowed_images);
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_text), (&PyUnicode_Type), 1, "text", 1))) __PYX_ERR(0, 581, __pyx_L1_error)
+  __pyx_r = __pyx_pf_12_win_console_8inject_console_input_verified(__pyx_self, __pyx_v_target_pid, __pyx_v_expected_start_time, __pyx_v_text, __pyx_v_send_enter, __pyx_v_submit_delay_sec, __pyx_v_allowed_images, __pyx_v_respect_user_typing);
 
-  /* "_win_console.pyx":369
+  /* "_win_console.pyx":578
  * 
  * 
  * cpdef tuple inject_console_input_verified(             # <<<<<<<<<<<<<<
@@ -8114,11 +10079,12 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __pyx_L7_cleaned_up:;
 
 
+
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_12_win_console_8inject_console_input_verified(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_target_pid, PyObject *__pyx_v_expected_start_time, PyObject *__pyx_v_text, int __pyx_v_send_enter, double __pyx_v_submit_delay_sec, PyObject *__pyx_v_allowed_images) {
+static PyObject *__pyx_pf_12_win_console_8inject_console_input_verified(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_target_pid, PyObject *__pyx_v_expected_start_time, PyObject *__pyx_v_text, int __pyx_v_send_enter, double __pyx_v_submit_delay_sec, PyObject *__pyx_v_allowed_images, int __pyx_v_respect_user_typing) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
@@ -8127,12 +10093,13 @@ static PyObject *__pyx_pf_12_win_console_8inject_console_input_verified(CYTHON_U
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("inject_console_input_verified", 0);
-  __pyx_t_2.__pyx_n = 4;
+  __pyx_t_2.__pyx_n = 5;
   __pyx_t_2.text = __pyx_v_text;
   __pyx_t_2.send_enter = __pyx_v_send_enter;
   __pyx_t_2.submit_delay_sec = __pyx_v_submit_delay_sec;
   __pyx_t_2.allowed_images = __pyx_v_allowed_images;
-  __pyx_t_1 = __pyx_f_12_win_console_inject_console_input_verified(__pyx_v_target_pid, __pyx_v_expected_start_time, 1, &__pyx_t_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 369, __pyx_L1_error)
+  __pyx_t_2.respect_user_typing = __pyx_v_respect_user_typing;
+  __pyx_t_1 = __pyx_f_12_win_console_inject_console_input_verified(__pyx_v_target_pid, __pyx_v_expected_start_time, 1, &__pyx_t_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 578, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   {
     PyObject *__pyx_temp;
@@ -8156,7 +10123,7 @@ static PyObject *__pyx_pf_12_win_console_8inject_console_input_verified(CYTHON_U
   return __pyx_r;
 }
 
-/* "_win_console.pyx":523
+/* "_win_console.pyx":740
  * 
  * 
  * cpdef bint inject_console_input(             # <<<<<<<<<<<<<<
@@ -8174,7 +10141,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 static int __pyx_f_12_win_console_inject_console_input(PyObject *__pyx_v_target_pid, CYTHON_UNUSED int __pyx_skip_dispatch, struct __pyx_opt_args_12_win_console_inject_console_input *__pyx_optional_args) {
   PyObject *__pyx_v_text = ((PyObject*)__pyx_mstate_global->__pyx_n_u__2);
 
-  /* "_win_console.pyx":526
+  /* "_win_console.pyx":743
  *     object target_pid,
  *     str text = "",
  *     bint send_enter = True,             # <<<<<<<<<<<<<<
@@ -8184,23 +10151,32 @@ static int __pyx_f_12_win_console_inject_console_input(PyObject *__pyx_v_target_
   int __pyx_v_send_enter = ((int)1);
   double __pyx_v_submit_delay_sec = ((double)0.08);
 
-  /* "_win_console.pyx":528
+  /* "_win_console.pyx":745
  *     bint send_enter = True,
  *     double submit_delay_sec = 0.08,
  *     object expected_start_time = None,             # <<<<<<<<<<<<<<
  *     object allowed_images = None,
- * ):
+ *     bint respect_user_typing = True,
 */
   PyObject *__pyx_v_expected_start_time = ((PyObject *)Py_None);
 
-  /* "_win_console.pyx":529
+  /* "_win_console.pyx":746
  *     double submit_delay_sec = 0.08,
  *     object expected_start_time = None,
  *     object allowed_images = None,             # <<<<<<<<<<<<<<
+ *     bint respect_user_typing = True,
+ * ):
+*/
+  PyObject *__pyx_v_allowed_images = ((PyObject *)Py_None);
+
+  /* "_win_console.pyx":747
+ *     object expected_start_time = None,
+ *     object allowed_images = None,
+ *     bint respect_user_typing = True,             # <<<<<<<<<<<<<<
  * ):
  *     """
 */
-  PyObject *__pyx_v_allowed_images = ((PyObject *)Py_None);
+  int __pyx_v_respect_user_typing = ((int)1);
   PyObject *__pyx_v_ok = NULL;
   CYTHON_UNUSED PyObject *__pyx_v__ = NULL;
   int __pyx_r;
@@ -8228,6 +10204,9 @@ static int __pyx_f_12_win_console_inject_console_input(PyObject *__pyx_v_target_
             __pyx_v_expected_start_time = __pyx_optional_args->expected_start_time;
             if (__pyx_optional_args->__pyx_n > 4) {
               __pyx_v_allowed_images = __pyx_optional_args->allowed_images;
+              if (__pyx_optional_args->__pyx_n > 5) {
+                __pyx_v_respect_user_typing = __pyx_optional_args->respect_user_typing;
+              }
             }
           }
         }
@@ -8235,7 +10214,7 @@ static int __pyx_f_12_win_console_inject_console_input(PyObject *__pyx_v_target_
     }
   }
 
-  /* "_win_console.pyx":536
+  /* "_win_console.pyx":754
  *     """
  *     if (
  *         expected_start_time is None             # <<<<<<<<<<<<<<
@@ -8252,7 +10231,7 @@ static int __pyx_f_12_win_console_inject_console_input(PyObject *__pyx_v_target_
     goto __pyx_L4_bool_binop_done;
   }
 
-  /* "_win_console.pyx":537
+  /* "_win_console.pyx":755
  *     if (
  *         expected_start_time is None
  *         or not isinstance(expected_start_time, int)             # <<<<<<<<<<<<<<
@@ -8272,7 +10251,7 @@ static int __pyx_f_12_win_console_inject_console_input(PyObject *__pyx_v_target_
     goto __pyx_L4_bool_binop_done;
   }
 
-  /* "_win_console.pyx":538
+  /* "_win_console.pyx":756
  *         expected_start_time is None
  *         or not isinstance(expected_start_time, int)
  *         or isinstance(expected_start_time, bool)             # <<<<<<<<<<<<<<
@@ -8289,20 +10268,20 @@ static int __pyx_f_12_win_console_inject_console_input(PyObject *__pyx_v_target_
     goto __pyx_L4_bool_binop_done;
   }
 
-  /* "_win_console.pyx":539
+  /* "_win_console.pyx":757
  *         or not isinstance(expected_start_time, int)
  *         or isinstance(expected_start_time, bool)
  *         or expected_start_time <= 0             # <<<<<<<<<<<<<<
  *     ):
  *         return False
 */
-  __pyx_t_3 = __Pyx_PyObject_CompareBoolLe_object_int(__pyx_v_expected_start_time, __pyx_mstate_global->__pyx_int_0, Py_LE); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 539, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyObject_CompareBoolLe_object_int(__pyx_v_expected_start_time, __pyx_mstate_global->__pyx_int_0, Py_LE); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 757, __pyx_L1_error)
 
   __pyx_t_1 = __pyx_t_3;
 
   __pyx_L4_bool_binop_done:;
 
-  /* "_win_console.pyx":535
+  /* "_win_console.pyx":753
  *     Fail-Closed : expected_start_time  None  <= 0  False
  *     """
  *     if (             # <<<<<<<<<<<<<<
@@ -8312,7 +10291,7 @@ static int __pyx_f_12_win_console_inject_console_input(PyObject *__pyx_v_target_
   if (__pyx_t_1) {
 
 
-    /* "_win_console.pyx":541
+    /* "_win_console.pyx":759
  *         or expected_start_time <= 0
  *     ):
  *         return False             # <<<<<<<<<<<<<<
@@ -8325,7 +10304,7 @@ static int __pyx_f_12_win_console_inject_console_input(PyObject *__pyx_v_target_
     }
     goto __pyx_L0;
 
-    /* "_win_console.pyx":535
+    /* "_win_console.pyx":753
  *     Fail-Closed : expected_start_time  None  <= 0  False
  *     """
  *     if (             # <<<<<<<<<<<<<<
@@ -8334,19 +10313,20 @@ static int __pyx_f_12_win_console_inject_console_input(PyObject *__pyx_v_target_
 */
   }
 
-  /* "_win_console.pyx":543
+  /* "_win_console.pyx":761
  *         return False
  * 
  *     ok, _, _ = inject_console_input_verified(             # <<<<<<<<<<<<<<
  *         target_pid,
  *         expected_start_time,
 */
-  __pyx_t_5.__pyx_n = 4;
+  __pyx_t_5.__pyx_n = 5;
   __pyx_t_5.text = __pyx_v_text;
   __pyx_t_5.send_enter = __pyx_v_send_enter;
   __pyx_t_5.submit_delay_sec = __pyx_v_submit_delay_sec;
   __pyx_t_5.allowed_images = __pyx_v_allowed_images;
-  __pyx_t_4 = __pyx_f_12_win_console_inject_console_input_verified(__pyx_v_target_pid, __pyx_v_expected_start_time, 0, &__pyx_t_5); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 543, __pyx_L1_error)
+  __pyx_t_5.respect_user_typing = __pyx_v_respect_user_typing;
+  __pyx_t_4 = __pyx_f_12_win_console_inject_console_input_verified(__pyx_v_target_pid, __pyx_v_expected_start_time, 0, &__pyx_t_5); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 761, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   if (likely(__pyx_t_4 != Py_None)) {
     PyObject* sequence = __pyx_t_4;
@@ -8354,7 +10334,7 @@ static int __pyx_f_12_win_console_inject_console_input(PyObject *__pyx_v_target_
     if (unlikely(size != 3)) {
       if (size > 3) __Pyx_RaiseTooManyValuesError(3);
       else if (size >= 0) __Pyx_RaiseNeedMoreValuesError(size);
-      __PYX_ERR(0, 543, __pyx_L1_error)
+      __PYX_ERR(0, 761, __pyx_L1_error)
     }
     #if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
     __pyx_t_6 = PyTuple_GET_ITEM(sequence, 0);
@@ -8364,16 +10344,16 @@ static int __pyx_f_12_win_console_inject_console_input(PyObject *__pyx_v_target_
     __pyx_t_8 = PyTuple_GET_ITEM(sequence, 2);
     __Pyx_INCREF(__pyx_t_8);
     #else
-    __pyx_t_6 = __Pyx_PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 543, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 761, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
-    __pyx_t_7 = __Pyx_PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 543, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 761, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
-    __pyx_t_8 = __Pyx_PySequence_ITEM(sequence, 2); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 543, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PySequence_ITEM(sequence, 2); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 761, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
     #endif
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
   } else {
-    __Pyx_RaiseNoneNotIterableError(); __PYX_ERR(0, 543, __pyx_L1_error)
+    __Pyx_RaiseNoneNotIterableError(); __PYX_ERR(0, 761, __pyx_L1_error)
   }
   __pyx_v_ok = __pyx_t_6;
   __pyx_t_6 = 0;
@@ -8382,12 +10362,12 @@ static int __pyx_f_12_win_console_inject_console_input(PyObject *__pyx_v_target_
   __Pyx_DECREF_SET(__pyx_v__, __pyx_t_8);
   __pyx_t_8 = 0;
 
-  /* "_win_console.pyx":551
- *         allowed_images=allowed_images,
+  /* "_win_console.pyx":770
+ *         respect_user_typing=respect_user_typing,
  *     )
  *     return bool(ok)             # <<<<<<<<<<<<<<
 */
-  __pyx_t_1 = __Pyx_PyObject_IsTrue(__pyx_v_ok); if (unlikely((__pyx_t_1 < 0))) __PYX_ERR(0, 551, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyObject_IsTrue(__pyx_v_ok); if (unlikely((__pyx_t_1 < 0))) __PYX_ERR(0, 770, __pyx_L1_error)
   {
 
     __pyx_r = (!(!__pyx_t_1));
@@ -8395,7 +10375,7 @@ static int __pyx_f_12_win_console_inject_console_input(PyObject *__pyx_v_target_
 
   goto __pyx_L0;
 
-  /* "_win_console.pyx":523
+  /* "_win_console.pyx":740
  * 
  * 
  * cpdef bint inject_console_input(             # <<<<<<<<<<<<<<
@@ -8442,11 +10422,12 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   double __pyx_v_submit_delay_sec;
   PyObject *__pyx_v_expected_start_time = 0;
   PyObject *__pyx_v_allowed_images = 0;
+  int __pyx_v_respect_user_typing;
   #if !CYTHON_VECTORCALL
   CYTHON_UNUSED Py_ssize_t __pyx_nargs;
   #endif
   CYTHON_UNUSED PyObject *const *__pyx_kwvalues;
-  PyObject* values[6] = {0,0,0,0,0,0};
+  PyObject* values[7] = {0,0,0,0,0,0,0};
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
@@ -8462,117 +10443,125 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   #endif
   __pyx_kwvalues = __Pyx_KwValues_FASTCALL(__pyx_args, __pyx_nargs);
   {
-    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_target_pid,&__pyx_mstate_global->__pyx_n_u_text,&__pyx_mstate_global->__pyx_n_u_send_enter,&__pyx_mstate_global->__pyx_n_u_submit_delay_sec,&__pyx_mstate_global->__pyx_n_u_expected_start_time,&__pyx_mstate_global->__pyx_n_u_allowed_images,0};
+    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_target_pid,&__pyx_mstate_global->__pyx_n_u_text,&__pyx_mstate_global->__pyx_n_u_send_enter,&__pyx_mstate_global->__pyx_n_u_submit_delay_sec,&__pyx_mstate_global->__pyx_n_u_expected_start_time,&__pyx_mstate_global->__pyx_n_u_allowed_images,&__pyx_mstate_global->__pyx_n_u_respect_user_typing,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len < 0)) __PYX_ERR(0, 523, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len < 0)) __PYX_ERR(0, 740, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
+        case  7:
+        values[6] = __Pyx_ArgRef_FASTCALL(__pyx_args, 6);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[6])) __PYX_ERR(0, 740, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
         case  6:
         values[5] = __Pyx_ArgRef_FASTCALL(__pyx_args, 5);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 523, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 740, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  5:
         values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 523, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 740, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  4:
         values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 523, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 740, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 523, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 740, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 523, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 740, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 523, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 740, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "inject_console_input", 0) < (0)) __PYX_ERR(0, 523, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "inject_console_input", 0) < (0)) __PYX_ERR(0, 740, __pyx_L3_error)
       if (!values[1]) values[1] = __Pyx_NewRef(((PyObject*)__pyx_mstate_global->__pyx_n_u__2));
 
-      /* "_win_console.pyx":528
+      /* "_win_console.pyx":745
  *     bint send_enter = True,
  *     double submit_delay_sec = 0.08,
  *     object expected_start_time = None,             # <<<<<<<<<<<<<<
  *     object allowed_images = None,
- * ):
+ *     bint respect_user_typing = True,
 */
       if (!values[4]) values[4] = __Pyx_NewRef(((PyObject *)Py_None));
 
-      /* "_win_console.pyx":529
+      /* "_win_console.pyx":746
  *     double submit_delay_sec = 0.08,
  *     object expected_start_time = None,
  *     object allowed_images = None,             # <<<<<<<<<<<<<<
+ *     bint respect_user_typing = True,
  * ):
- *     """
 */
       if (!values[5]) values[5] = __Pyx_NewRef(((PyObject *)Py_None));
       for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("inject_console_input", 0, 1, 6, i); __PYX_ERR(0, 523, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("inject_console_input", 0, 1, 7, i); __PYX_ERR(0, 740, __pyx_L3_error) }
       }
     } else {
       switch (__pyx_nargs) {
+        case  7:
+        values[6] = __Pyx_ArgRef_FASTCALL(__pyx_args, 6);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[6])) __PYX_ERR(0, 740, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
         case  6:
         values[5] = __Pyx_ArgRef_FASTCALL(__pyx_args, 5);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 523, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 740, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  5:
         values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 523, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 740, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  4:
         values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 523, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 740, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 523, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 740, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 523, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 740, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 523, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 740, __pyx_L3_error)
         break;
         default: goto __pyx_L5_argtuple_error;
       }
       if (!values[1]) values[1] = __Pyx_NewRef(((PyObject*)__pyx_mstate_global->__pyx_n_u__2));
 
-      /* "_win_console.pyx":528
+      /* "_win_console.pyx":745
  *     bint send_enter = True,
  *     double submit_delay_sec = 0.08,
  *     object expected_start_time = None,             # <<<<<<<<<<<<<<
  *     object allowed_images = None,
- * ):
+ *     bint respect_user_typing = True,
 */
       if (!values[4]) values[4] = __Pyx_NewRef(((PyObject *)Py_None));
 
-      /* "_win_console.pyx":529
+      /* "_win_console.pyx":746
  *     double submit_delay_sec = 0.08,
  *     object expected_start_time = None,
  *     object allowed_images = None,             # <<<<<<<<<<<<<<
+ *     bint respect_user_typing = True,
  * ):
- *     """
 */
       if (!values[5]) values[5] = __Pyx_NewRef(((PyObject *)Py_None));
     }
     __pyx_v_target_pid = values[0];
     __pyx_v_text = ((PyObject*)values[1]);
     if (values[2]) {
-      __pyx_v_send_enter = __Pyx_PyObject_IsTrue(values[2]); if (unlikely((__pyx_v_send_enter == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 526, __pyx_L3_error)
+      __pyx_v_send_enter = __Pyx_PyObject_IsTrue(values[2]); if (unlikely((__pyx_v_send_enter == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 743, __pyx_L3_error)
     } else {
 
-      /* "_win_console.pyx":526
+      /* "_win_console.pyx":743
  *     object target_pid,
  *     str text = "",
  *     bint send_enter = True,             # <<<<<<<<<<<<<<
@@ -8582,16 +10571,29 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
       __pyx_v_send_enter = ((int)1);
     }
     if (values[3]) {
-      __pyx_v_submit_delay_sec = __Pyx_PyFloat_AsDouble(values[3]); if (unlikely((__pyx_v_submit_delay_sec == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 527, __pyx_L3_error)
+      __pyx_v_submit_delay_sec = __Pyx_PyFloat_AsDouble(values[3]); if (unlikely((__pyx_v_submit_delay_sec == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 744, __pyx_L3_error)
     } else {
       __pyx_v_submit_delay_sec = ((double)0.08);
     }
     __pyx_v_expected_start_time = values[4];
     __pyx_v_allowed_images = values[5];
+    if (values[6]) {
+      __pyx_v_respect_user_typing = __Pyx_PyObject_IsTrue(values[6]); if (unlikely((__pyx_v_respect_user_typing == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 747, __pyx_L3_error)
+    } else {
+
+      /* "_win_console.pyx":747
+ *     object expected_start_time = None,
+ *     object allowed_images = None,
+ *     bint respect_user_typing = True,             # <<<<<<<<<<<<<<
+ * ):
+ *     """
+*/
+      __pyx_v_respect_user_typing = ((int)1);
+    }
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("inject_console_input", 0, 1, 6, __pyx_nargs); __PYX_ERR(0, 523, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("inject_console_input", 0, 1, 7, __pyx_nargs); __PYX_ERR(0, 740, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -8602,10 +10604,10 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_text), (&PyUnicode_Type), 1, "text", 1))) __PYX_ERR(0, 525, __pyx_L1_error)
-  __pyx_r = __pyx_pf_12_win_console_10inject_console_input(__pyx_self, __pyx_v_target_pid, __pyx_v_text, __pyx_v_send_enter, __pyx_v_submit_delay_sec, __pyx_v_expected_start_time, __pyx_v_allowed_images);
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_text), (&PyUnicode_Type), 1, "text", 1))) __PYX_ERR(0, 742, __pyx_L1_error)
+  __pyx_r = __pyx_pf_12_win_console_10inject_console_input(__pyx_self, __pyx_v_target_pid, __pyx_v_text, __pyx_v_send_enter, __pyx_v_submit_delay_sec, __pyx_v_expected_start_time, __pyx_v_allowed_images, __pyx_v_respect_user_typing);
 
-  /* "_win_console.pyx":523
+  /* "_win_console.pyx":740
  * 
  * 
  * cpdef bint inject_console_input(             # <<<<<<<<<<<<<<
@@ -8628,11 +10630,12 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __pyx_L7_cleaned_up:;
 
 
+
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_12_win_console_10inject_console_input(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_target_pid, PyObject *__pyx_v_text, int __pyx_v_send_enter, double __pyx_v_submit_delay_sec, PyObject *__pyx_v_expected_start_time, PyObject *__pyx_v_allowed_images) {
+static PyObject *__pyx_pf_12_win_console_10inject_console_input(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_target_pid, PyObject *__pyx_v_text, int __pyx_v_send_enter, double __pyx_v_submit_delay_sec, PyObject *__pyx_v_expected_start_time, PyObject *__pyx_v_allowed_images, int __pyx_v_respect_user_typing) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   int __pyx_t_1;
@@ -8642,14 +10645,15 @@ static PyObject *__pyx_pf_12_win_console_10inject_console_input(CYTHON_UNUSED Py
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("inject_console_input", 0);
-  __pyx_t_2.__pyx_n = 5;
+  __pyx_t_2.__pyx_n = 6;
   __pyx_t_2.text = __pyx_v_text;
   __pyx_t_2.send_enter = __pyx_v_send_enter;
   __pyx_t_2.submit_delay_sec = __pyx_v_submit_delay_sec;
   __pyx_t_2.expected_start_time = __pyx_v_expected_start_time;
   __pyx_t_2.allowed_images = __pyx_v_allowed_images;
-  __pyx_t_1 = __pyx_f_12_win_console_inject_console_input(__pyx_v_target_pid, 1, &__pyx_t_2); if (unlikely(__pyx_t_1 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 523, __pyx_L1_error)
-  __pyx_t_3 = __Pyx_PyBool_FromLong(__pyx_t_1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 523, __pyx_L1_error)
+  __pyx_t_2.respect_user_typing = __pyx_v_respect_user_typing;
+  __pyx_t_1 = __pyx_f_12_win_console_inject_console_input(__pyx_v_target_pid, 1, &__pyx_t_2); if (unlikely(__pyx_t_1 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 740, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyBool_FromLong(__pyx_t_1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 740, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
 
   {
@@ -9056,100 +11060,100 @@ __Pyx_RefNannySetupContext("PyInit__win_console", 0);
  * 
  * cdef extern from "Python.h":
 */
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_DEFAULT_ALLOWED_IMAGES, __pyx_mstate_global->__pyx_tuple[5]) < (0)) __PYX_ERR(0, 29, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_DEFAULT_ALLOWED_IMAGES, __pyx_mstate_global->__pyx_tuple[6]) < (0)) __PYX_ERR(0, 29, __pyx_L1_error)
 
-  /* "_win_console.pyx":189
+  /* "_win_console.pyx":230
  * 
  * 
  * def _normalize_allowed_images(object allowed_images):             # <<<<<<<<<<<<<<
  *     if allowed_images is None:
  *         return None
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_12_win_console_1_normalize_allowed_images, 0, __pyx_mstate_global->__pyx_n_u_normalize_allowed_images, NULL, __pyx_mstate_global->__pyx_n_u_win_console, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[0])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 189, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_12_win_console_1_normalize_allowed_images, 0, __pyx_mstate_global->__pyx_n_u_normalize_allowed_images, NULL, __pyx_mstate_global->__pyx_n_u_win_console, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[0])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 230, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_normalize_allowed_images, __pyx_t_2) < (0)) __PYX_ERR(0, 189, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_normalize_allowed_images, __pyx_t_2) < (0)) __PYX_ERR(0, 230, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "_win_console.pyx":195
+  /* "_win_console.pyx":236
  * 
  * 
  * def _query_image_basename_py(unsigned long pid):             # <<<<<<<<<<<<<<
  *     """Helper using OpenProcess + QueryFullProcessImageNameW for Python-side allowlist check."""
  *     cdef HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, <DWORD>pid)
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_12_win_console_3_query_image_basename_py, 0, __pyx_mstate_global->__pyx_n_u_query_image_basename_py, NULL, __pyx_mstate_global->__pyx_n_u_win_console, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[1])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 195, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_12_win_console_3_query_image_basename_py, 0, __pyx_mstate_global->__pyx_n_u_query_image_basename_py, NULL, __pyx_mstate_global->__pyx_n_u_win_console, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[1])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 236, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_query_image_basename_py, __pyx_t_2) < (0)) __PYX_ERR(0, 195, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_query_image_basename_py, __pyx_t_2) < (0)) __PYX_ERR(0, 236, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "_win_console.pyx":215
+  /* "_win_console.pyx":256
  * # ============================================================================
  * 
  * cpdef object find_process_by_lock_path(             # <<<<<<<<<<<<<<
  *     str lock_path,
  *     object allowed_images = None,
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_12_win_console_5find_process_by_lock_path, 0, __pyx_mstate_global->__pyx_n_u_find_process_by_lock_path, NULL, __pyx_mstate_global->__pyx_n_u_win_console, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[2])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 215, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_12_win_console_5find_process_by_lock_path, 0, __pyx_mstate_global->__pyx_n_u_find_process_by_lock_path, NULL, __pyx_mstate_global->__pyx_n_u_win_console, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[2])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 256, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_2, __pyx_mstate_global->__pyx_tuple[6]);
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_find_process_by_lock_path, __pyx_t_2) < (0)) __PYX_ERR(0, 215, __pyx_L1_error)
+  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_2, __pyx_mstate_global->__pyx_tuple[7]);
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_find_process_by_lock_path, __pyx_t_2) < (0)) __PYX_ERR(0, 256, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "_win_console.pyx":340
+  /* "_win_console.pyx":381
  * 
  * 
  * cpdef object find_pid_by_lock_path(str lock_path, object allowed_images = None):             # <<<<<<<<<<<<<<
  *     """: find_process_by_lock_path  PID (int) """
  *     identity = find_process_by_lock_path(lock_path, allowed_images=allowed_images)
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_12_win_console_7find_pid_by_lock_path, 0, __pyx_mstate_global->__pyx_n_u_find_pid_by_lock_path, NULL, __pyx_mstate_global->__pyx_n_u_win_console, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[3])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 340, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_12_win_console_7find_pid_by_lock_path, 0, __pyx_mstate_global->__pyx_n_u_find_pid_by_lock_path, NULL, __pyx_mstate_global->__pyx_n_u_win_console, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[3])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 381, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_2, __pyx_mstate_global->__pyx_tuple[7]);
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_find_pid_by_lock_path, __pyx_t_2) < (0)) __PYX_ERR(0, 340, __pyx_L1_error)
+  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_2, __pyx_mstate_global->__pyx_tuple[8]);
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_find_pid_by_lock_path, __pyx_t_2) < (0)) __PYX_ERR(0, 381, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "_win_console.pyx":369
+  /* "_win_console.pyx":578
  * 
  * 
  * cpdef tuple inject_console_input_verified(             # <<<<<<<<<<<<<<
  *     object target_pid,
  *     object expected_start_time,
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_12_win_console_9inject_console_input_verified, 0, __pyx_mstate_global->__pyx_n_u_inject_console_input_verified, NULL, __pyx_mstate_global->__pyx_n_u_win_console, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[4])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 369, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_12_win_console_9inject_console_input_verified, 0, __pyx_mstate_global->__pyx_n_u_inject_console_input_verified, NULL, __pyx_mstate_global->__pyx_n_u_win_console, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[4])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 578, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_2, __pyx_mstate_global->__pyx_tuple[8]);
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_inject_console_input_verified, __pyx_t_2) < (0)) __PYX_ERR(0, 369, __pyx_L1_error)
+  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_2, __pyx_mstate_global->__pyx_tuple[9]);
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_inject_console_input_verified, __pyx_t_2) < (0)) __PYX_ERR(0, 578, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "_win_console.pyx":523
+  /* "_win_console.pyx":740
  * 
  * 
  * cpdef bint inject_console_input(             # <<<<<<<<<<<<<<
  *     object target_pid,
  *     str text = "",
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_12_win_console_11inject_console_input, 0, __pyx_mstate_global->__pyx_n_u_inject_console_input, NULL, __pyx_mstate_global->__pyx_n_u_win_console, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[5])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 523, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_12_win_console_11inject_console_input, 0, __pyx_mstate_global->__pyx_n_u_inject_console_input, NULL, __pyx_mstate_global->__pyx_n_u_win_console, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[5])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 740, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_2, __pyx_mstate_global->__pyx_tuple[9]);
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_inject_console_input, __pyx_t_2) < (0)) __PYX_ERR(0, 523, __pyx_L1_error)
+  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_2, __pyx_mstate_global->__pyx_tuple[10]);
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_inject_console_input, __pyx_t_2) < (0)) __PYX_ERR(0, 740, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
   /* "_win_console.pyx":1
@@ -9218,7 +11222,7 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
   CYTHON_UNUSED_VAR(__pyx_mstate);
   __Pyx_RefNannySetupContext("__Pyx_InitCachedConstants", 0);
 
-  /* "_win_console.pyx":389
+  /* "_win_console.pyx":599
  *         or expected_start_time <= 0
  *     ):
  *         return (False, "invalid_pid_or_start_time", 0)             # <<<<<<<<<<<<<<
@@ -9227,12 +11231,12 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
 */
   {
     PyObject* __pyx_temp[3] = {Py_False, __pyx_mstate_global->__pyx_n_u_invalid_pid_or_start_time, __pyx_mstate_global->__pyx_int_0};
-    __pyx_mstate_global->__pyx_tuple[0] = __Pyx_PyTuple_FromArray(__pyx_temp, 3); if (unlikely(!__pyx_mstate_global->__pyx_tuple[0])) __PYX_ERR(0, 389, __pyx_L1_error)
+    __pyx_mstate_global->__pyx_tuple[0] = __Pyx_PyTuple_FromArray(__pyx_temp, 3); if (unlikely(!__pyx_mstate_global->__pyx_tuple[0])) __PYX_ERR(0, 599, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[0]);
   }
   __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[0]);
 
-  /* "_win_console.pyx":393
+  /* "_win_console.pyx":603
  *     allowed_set = _normalize_allowed_images(allowed_images)
  *     if allowed_set is not None and len(allowed_set) == 0:
  *         return (False, "image_name_mismatch", 0)             # <<<<<<<<<<<<<<
@@ -9241,12 +11245,12 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
 */
   {
     PyObject* __pyx_temp[3] = {Py_False, __pyx_mstate_global->__pyx_n_u_image_name_mismatch, __pyx_mstate_global->__pyx_int_0};
-    __pyx_mstate_global->__pyx_tuple[1] = __Pyx_PyTuple_FromArray(__pyx_temp, 3); if (unlikely(!__pyx_mstate_global->__pyx_tuple[1])) __PYX_ERR(0, 393, __pyx_L1_error)
+    __pyx_mstate_global->__pyx_tuple[1] = __Pyx_PyTuple_FromArray(__pyx_temp, 3); if (unlikely(!__pyx_mstate_global->__pyx_tuple[1])) __PYX_ERR(0, 603, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[1]);
   }
   __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[1]);
 
-  /* "_win_console.pyx":430
+  /* "_win_console.pyx":640
  *             # [Step 2] Non-blocking liveness check
  *             if WaitForSingleObject(h_proc, 0) != WAIT_TIMEOUT:
  *                 return (False, "process_already_exited", 0)             # <<<<<<<<<<<<<<
@@ -9255,12 +11259,12 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
 */
   {
     PyObject* __pyx_temp[3] = {Py_False, __pyx_mstate_global->__pyx_n_u_process_already_exited, __pyx_mstate_global->__pyx_int_0};
-    __pyx_mstate_global->__pyx_tuple[2] = __Pyx_PyTuple_FromArray(__pyx_temp, 3); if (unlikely(!__pyx_mstate_global->__pyx_tuple[2])) __PYX_ERR(0, 430, __pyx_L1_error)
+    __pyx_mstate_global->__pyx_tuple[2] = __Pyx_PyTuple_FromArray(__pyx_temp, 3); if (unlikely(!__pyx_mstate_global->__pyx_tuple[2])) __PYX_ERR(0, 640, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[2]);
   }
   __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[2]);
 
-  /* "_win_console.pyx":437
+  /* "_win_console.pyx":647
  *             actual_ft = _ft_to_u64(c_ft)
  *             if actual_ft == 0 or actual_ft != expected_ft:
  *                 return (False, "pid_reused_start_time_mismatch", 0)             # <<<<<<<<<<<<<<
@@ -9269,24 +11273,38 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
 */
   {
     PyObject* __pyx_temp[3] = {Py_False, __pyx_mstate_global->__pyx_n_u_pid_reused_start_time_mismatch, __pyx_mstate_global->__pyx_int_0};
-    __pyx_mstate_global->__pyx_tuple[3] = __Pyx_PyTuple_FromArray(__pyx_temp, 3); if (unlikely(!__pyx_mstate_global->__pyx_tuple[3])) __PYX_ERR(0, 437, __pyx_L1_error)
+    __pyx_mstate_global->__pyx_tuple[3] = __Pyx_PyTuple_FromArray(__pyx_temp, 3); if (unlikely(!__pyx_mstate_global->__pyx_tuple[3])) __PYX_ERR(0, 647, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[3]);
   }
   __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[3]);
 
-  /* "_win_console.pyx":515
- *             elif nogil_status == 4:
+  /* "_win_console.pyx":729
  *                 return (False, "write_console_input_failed", <int>err_code)
+ *             elif nogil_status == 5:
+ *                 return (False, "deferred_user_typing", 0)             # <<<<<<<<<<<<<<
+ *             elif nogil_status == 6:
+ *                 return (False, "user_typing_check_failed", <int>err_code)
+*/
+  {
+    PyObject* __pyx_temp[3] = {Py_False, __pyx_mstate_global->__pyx_n_u_deferred_user_typing, __pyx_mstate_global->__pyx_int_0};
+    __pyx_mstate_global->__pyx_tuple[4] = __Pyx_PyTuple_FromArray(__pyx_temp, 3); if (unlikely(!__pyx_mstate_global->__pyx_tuple[4])) __PYX_ERR(0, 729, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[4]);
+  }
+  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[4]);
+
+  /* "_win_console.pyx":732
+ *             elif nogil_status == 6:
+ *                 return (False, "user_typing_check_failed", <int>err_code)
  *             return (True, "ok", 0)             # <<<<<<<<<<<<<<
  *         finally:
  *             CloseHandle(h_proc)
 */
   {
     PyObject* __pyx_temp[3] = {Py_True, __pyx_mstate_global->__pyx_n_u_ok, __pyx_mstate_global->__pyx_int_0};
-    __pyx_mstate_global->__pyx_tuple[4] = __Pyx_PyTuple_FromArray(__pyx_temp, 3); if (unlikely(!__pyx_mstate_global->__pyx_tuple[4])) __PYX_ERR(0, 515, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[4]);
+    __pyx_mstate_global->__pyx_tuple[5] = __Pyx_PyTuple_FromArray(__pyx_temp, 3); if (unlikely(!__pyx_mstate_global->__pyx_tuple[5])) __PYX_ERR(0, 732, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[5]);
   }
-  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[4]);
+  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[5]);
 
   /* "_win_console.pyx":29
  * 
@@ -9297,12 +11315,12 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
 */
   {
     PyObject* __pyx_temp[1] = {__pyx_mstate_global->__pyx_kp_u_agy_exe};
-    __pyx_mstate_global->__pyx_tuple[5] = __Pyx_PyTuple_FromArray(__pyx_temp, 1); if (unlikely(!__pyx_mstate_global->__pyx_tuple[5])) __PYX_ERR(0, 29, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[5]);
+    __pyx_mstate_global->__pyx_tuple[6] = __Pyx_PyTuple_FromArray(__pyx_temp, 1); if (unlikely(!__pyx_mstate_global->__pyx_tuple[6])) __PYX_ERR(0, 29, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[6]);
   }
-  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[5]);
+  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[6]);
 
-  /* "_win_console.pyx":215
+  /* "_win_console.pyx":256
  * # ============================================================================
  * 
  * cpdef object find_process_by_lock_path(             # <<<<<<<<<<<<<<
@@ -9311,12 +11329,12 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
 */
   {
     PyObject* __pyx_temp[2] = {Py_None, Py_True};
-    __pyx_mstate_global->__pyx_tuple[6] = __Pyx_PyTuple_FromArray(__pyx_temp, 2); if (unlikely(!__pyx_mstate_global->__pyx_tuple[6])) __PYX_ERR(0, 215, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[6]);
+    __pyx_mstate_global->__pyx_tuple[7] = __Pyx_PyTuple_FromArray(__pyx_temp, 2); if (unlikely(!__pyx_mstate_global->__pyx_tuple[7])) __PYX_ERR(0, 256, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[7]);
   }
-  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[6]);
+  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[7]);
 
-  /* "_win_console.pyx":340
+  /* "_win_console.pyx":381
  * 
  * 
  * cpdef object find_pid_by_lock_path(str lock_path, object allowed_images = None):             # <<<<<<<<<<<<<<
@@ -9325,12 +11343,12 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
 */
   {
     PyObject* __pyx_temp[1] = {Py_None};
-    __pyx_mstate_global->__pyx_tuple[7] = __Pyx_PyTuple_FromArray(__pyx_temp, 1); if (unlikely(!__pyx_mstate_global->__pyx_tuple[7])) __PYX_ERR(0, 340, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[7]);
+    __pyx_mstate_global->__pyx_tuple[8] = __Pyx_PyTuple_FromArray(__pyx_temp, 1); if (unlikely(!__pyx_mstate_global->__pyx_tuple[8])) __PYX_ERR(0, 381, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[8]);
   }
-  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[7]);
+  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[8]);
 
-  /* "_win_console.pyx":369
+  /* "_win_console.pyx":578
  * 
  * 
  * cpdef tuple inject_console_input_verified(             # <<<<<<<<<<<<<<
@@ -9338,13 +11356,13 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
  *     object expected_start_time,
 */
   {
-    PyObject* __pyx_temp[4] = {__pyx_mstate_global->__pyx_n_u__2, Py_True, __pyx_mstate_global->__pyx_float_0_08, Py_None};
-    __pyx_mstate_global->__pyx_tuple[8] = __Pyx_PyTuple_FromArray(__pyx_temp, 4); if (unlikely(!__pyx_mstate_global->__pyx_tuple[8])) __PYX_ERR(0, 369, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[8]);
+    PyObject* __pyx_temp[5] = {__pyx_mstate_global->__pyx_n_u__2, Py_True, __pyx_mstate_global->__pyx_float_0_08, Py_None, Py_True};
+    __pyx_mstate_global->__pyx_tuple[9] = __Pyx_PyTuple_FromArray(__pyx_temp, 5); if (unlikely(!__pyx_mstate_global->__pyx_tuple[9])) __PYX_ERR(0, 578, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[9]);
   }
-  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[8]);
+  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[9]);
 
-  /* "_win_console.pyx":523
+  /* "_win_console.pyx":740
  * 
  * 
  * cpdef bint inject_console_input(             # <<<<<<<<<<<<<<
@@ -9352,15 +11370,15 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
  *     str text = "",
 */
   {
-    PyObject* __pyx_temp[5] = {__pyx_mstate_global->__pyx_n_u__2, Py_True, __pyx_mstate_global->__pyx_float_0_08, Py_None, Py_None};
-    __pyx_mstate_global->__pyx_tuple[9] = __Pyx_PyTuple_FromArray(__pyx_temp, 5); if (unlikely(!__pyx_mstate_global->__pyx_tuple[9])) __PYX_ERR(0, 523, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[9]);
+    PyObject* __pyx_temp[6] = {__pyx_mstate_global->__pyx_n_u__2, Py_True, __pyx_mstate_global->__pyx_float_0_08, Py_None, Py_None, Py_True};
+    __pyx_mstate_global->__pyx_tuple[10] = __Pyx_PyTuple_FromArray(__pyx_temp, 6); if (unlikely(!__pyx_mstate_global->__pyx_tuple[10])) __PYX_ERR(0, 740, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[10]);
   }
-  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[9]);
+  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[10]);
   #if CYTHON_IMMORTAL_CONSTANTS
   {
     PyObject **table = __pyx_mstate->__pyx_tuple;
-    for (Py_ssize_t i=0; i<10; ++i) {
+    for (Py_ssize_t i=0; i<11; ++i) {
       #if PY_VERSION_HEX >= 0x030F0000
       PyUnstable_SetImmortal(table[i]);
       #elif CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
@@ -9394,38 +11412,38 @@ static int __Pyx_InitConstants(__pyx_mstatetype *__pyx_mstate) {
   int __pyx_clineno = 0;
   CYTHON_UNUSED_VAR(__pyx_mstate);
   {
-    const struct { const unsigned int length: 8; } str_length_index[] = {{1},{49},{44},{179},{16},{8},{7},{22},{8},{20},{12},{8},{8},{10},{8},{12},{8},{13},{25},{24},{12},{14},{18},{21},{8},{3},{8},{18},{17},{6},{19},{21},{25},{24},{1},{19},{18},{3},{20},{29},{25},{5},{9},{5},{4},{2},{19},{2},{4},{8},{3},{30},{3},{22},{17},{10},{10},{5},{16},{10},{4},{6},{26},{9}};
-    const struct { const unsigned int length: 11; } bytes_length_index[] = {{67},{111},{869},{1132},{112},{41}};
+    const struct { const unsigned int length: 8; } str_length_index[] = {{1},{49},{44},{179},{16},{8},{7},{22},{8},{20},{12},{8},{8},{10},{8},{12},{8},{13},{25},{24},{12},{14},{18},{21},{8},{3},{8},{18},{17},{6},{20},{19},{21},{25},{24},{1},{19},{18},{3},{20},{29},{25},{5},{9},{5},{4},{2},{19},{2},{4},{8},{3},{30},{3},{22},{19},{17},{10},{10},{5},{16},{10},{4},{24},{6},{26},{9}};
+    const struct { const unsigned int length: 11; } bytes_length_index[] = {{67},{111},{869},{1203},{118},{41}};
     #ifndef CYTHON_COMPRESS_STRINGS
       #define CYTHON_COMPRESS_STRINGS 90
     #endif
-    #if (CYTHON_COMPRESS_STRINGS) == 1 /* compression: zlib (2121 bytes) */
-static const char cstring[] = "x\332\215V\313S\333H\036\216\203\023\234\204Il0\340\004\023dL\010LvI\t\310\000yl\326<\222\"\223\311\306<\222l\036\245j\3446hbK\266$\007<K6\314\236|\324\261\217}\332\322Q\265\047\035u\364\261\217:\252jN{\233?a\177-\331\036\310\326\326\016e#\351\367~|_\313\217\237 \245\202K\202\251\t\250R\321ddb\341P)aA>@\272`\230\272\242\356\013eM\027@\367Q\252!\363\340\367:\230\370\310|\241\201\326<@\246\260\3264\0174UP\014\241\204+\312\036\326\301\257\322\014\355e\023\353\334H\025^n\274\374\343\342\362\242\200\324\222\240\343\037\261l\032\202\321\330\223+\3100\260!hea\257\241TLE\025\314f\r\033s\302fYhj\rA\305QA5\260;\355`\036`U0\260\311o\204\333HU5\023\231\212\246J\340\016e\336\026J\212\016I\224O\230{?A\025\003\317I\207\212*\311\232jh\025<Wk\036\241RI\002?\214\366\233s\370\010\257o<)\354>\337\221\n\317\237\377\345\365\306\272\264\371C\341\351\306\266\264ZX\373~\343\305\272$\275l\036\301w\035\232\222^\300\000\266pY\222:\211\261\004\177\345\206*\363k\025A\032~\325J\215J\250QQ5\274\326\033\250\322\2757\261a\302E1\240\"]k@\347\030\212\321\253\250\242\374\204%>\377C\\\222\224*\332\307\0068b\275\031=H{\310\300a\220Z\363tCg=\220\321TeE\233\353\3056\220i\"\371\240k-\225\303Uwc\3555\312\360\221\014H-Wx%\020\327\324\221\214\367\220\374\021\\\340Q\253a\265\343%\207\013\307G5\0300d4L\244\233\222\251TqYQKRM)I{M\251\007\252H\250k26\2143\212}l\366\344\334\333\350\204?\210\372\014{\254*F\025\231rG\024\215!\262R\252\373\212\312q\324kIQk\274\325\377\226I\237\260\256\224\025\360Q?\301x\243\0225\375T\341\212\211\253F\2570>H\035\3723\265\217a\327\335\"\243\304\232\301m\370\027\002\350\020\212G\323q\30383\212^\3455\255\326\365G\025\035\243RS\302G\220\257d\360\376\000\312\006G\255\246V\232\260\212\222\204U\240\014\340\272\204\313\250Q19\211j\000\373\252bJ\300.\324\004\017\031\222\204\263SJ\234\210\320R\003\033\207:\304\374\252\355\250\336\177\237\374\353\227\177\374\374\313\317\377<\211\371\361\376\223/\226LR~\342Z\253\356\307\257\264\304\326j\013[+\244@\266i\214\016\323\262\275j\227\2355\307t\227\274""\273\254\270\303v^\263\327o\330\233\367\354\375\036\333\223ObA<m}O\352LX\363\026\274\375v\221\207\324[C\255\rk\310Z\355\205\016\3427H\316\217_\360\023WZ\213\354\332\254\235\262\363\366\266s\301):\310\037\030\262D?1\304\206\270\370\226}\354\212\334G\267\206-\205\324\351%{\304\256\007\t\260\261\n\220.;\356\217\337\374u\340\334\205\304\211\331\022;\301\007\331\340\035[\264\013<\371\261\265Dn\021\223.PD?C\345\365\216\315\030\021\375\270\300\204\373n\316}\340!\257\036\031/X\310O\\m}$)\222\013\342\327I*\210_n\345Z\217H\037Y\242\271_/\236\273p\265U\204\221\210A|\324\002\237\021\260\217g\010\214n\330*v\376\rZ\320\333\2676\370\337$\240\315\261\334=\247\310\276\333l\247\333\3056\010\372Y\377u\222&;\024\206\001\266\226xz&Y\002e\207~\220\234\347\273\301k\010\365\227[s$\006\205\315\362fx\271fk\241\205\316\306\340#eW\300\2374\355>\373\201#\273#\256\341M\267\373\332b8\330\000\232S\254:\271DSt\306\316\331K\316\264\033sS|\021KV\336\332\262L\262H\014:I\327\355\270\275f\327;N\003\255Mk\227\344`f\003\327Z\207\260\307A\262@\366\351\026\255\373I>\007\220\376\235C\304O\246\255\002\314 )\300\375@\226e\347\000.\005v\357\207\366V\373\264U\350\003\246\376\300\2405KD\262I\213\364\300F\366\241\243yE\017qK3\334E2u\352\036\274\202n=\033\200\007\304\243\214Z\237i\001*9\342\305\216X?\002N\307!\222\356d\334\320\267\t\253\233\207\254\t\230\207\030\305c\327r4M?89g\336\371\340\345=\2507\025\014\014[\357h\214\345\326\274y\357\003\333\332e\273\257\272\315\016\023\231\216\366\334\277\361\223\000\316i\300\323\221m8y\247\350\247\207Ad-Z_BY\335\271\350 \347\223[t\313^\301\213\264Y\362\014tunv\037j9O\363\364-8\347@\031\200\354!9\204\215\246\371\332\323\243\226\311\306\0000\316\201+{\327\3339X\\\346\272\237\236`\023\\\250\270\307 \000#\035\252Rh\335\276\344\2148\206{\333K\201U\220\004$\202\274b\3178\271 \t\020\047\205\0006\013(i\375D\206\000Y\021\267\370@Ek\035l3t\204\326\271\311\237\"u\322\212Y\000\206h\211\021\260Nb\200B\350{d\324\2779\341g\3079\331.\372\260\201g0\377c*r\350\334\267\212V\205\346\370\355\203""\210\344\300kH\231b7\356\302Z\"\0136\002\244\014\3419\001\010\313\005\211\244\325\317F\027\235\302\377%lh8g\243\000\230\326O\200u\002\275l\003Wn\220\0316\271\000K|\307\376\\d\305m\266\375\226\275}\347\307\047\270\rt\037@8pO\261\024\217\376\004\366-v\201^\344\310\273C\212\004\205,\347\261\"\276v\036s4\025\364h\350\237\242f\310u\270\003\252\005\211\2245F\nl\374\261\253{\343m\231\025\267\272\341wI\236\274\246k4D\371S66\357\334r\216=\000\356\245\200\303o\222\346\350\262\275`\313N\312\207\235\365\263\211\025\227\223\375\233$l\346q\250\214\352\375\316M\271\323^\314\353\232=p\357y\003mXT\206\\\006\263\220\216|\263\253\200\320\033\020\020u\354\n^\047\3341?\266\374$\257\237C\224\215\212N\312\231q\363\356_\3033/\235%OY~\305\035v+m\260\030cc\\?\353>\364B\254\316C#\263T\244\233\366+g\301\331w\213\035\00784!\374\340\220\3171\026a\237\223\020\324\023\344\030\226\234\206\361A\332t\236\212\001\240\372\243\315\321\351gn\205\007Ff\306>\017\333\343\202\316\047\000<\037\021\203M.\001\224gBBf\362\364! \047s\033\034\256\377\301.\330o\234m\267\017^\005\\\022d\306\240\255<\335\265\247l\305\321\201\347\331;\366\262\263\342\256\272\310\317NS\315y\345\212\354a\004\211\035?;A\216\250\001)\005\016@\001\020\031\010St\303\036\206c\242\356O\001\002\201X\320\234\273\347\235\367\246\274r\273\320\336\351\275\333\276\326Oz\253^\251=\315^Bt8#\340\335\367\216\275{\037\010y\272\310n\303\026\335Yo\245\375\002`\010R\177\352n\370\372\232ZpD^\363#8C\346\355\035X:\224\324\014\247 \334\202\223\017\005\331o\355i\347\252\213\334\277\301\032\262\274\337\242]uEw\335\273\334\276\303v\371\273\365\177\210\003\010e\262|t6|\tA\310\266\266y\253\017\201:a\263\321ta\037\031\300-\201\331N\362\335\364Fn\272\313\360\256F|\344\"-t\264\234B\321\026\001\260\255\317d\r\236#h-\273\027\000\007\251\233\200\270.*\027\235\r\330\301\031\321\312\327\202G\356\256\227\343lxB\246i,\200c\273Nb\301ol\034\341\2479;\007y\203k\311\316a\223\233\374\355\274\311\206%\374\256s%|\021&Z}\374\247\005\314\314O\\:\363\031\315\004q\036\246n\305\330\271g""m\240=0r\306\216\261\3315O\344\047P\323\352\353\274O\371O\240e\376K\343?\023iFM";
-    PyObject *data = __Pyx_DecompressString(cstring, 2121, 1);
+    #if (CYTHON_COMPRESS_STRINGS) == 1 /* compression: zlib (2181 bytes) */
+static const char cstring[] = "x\332\215VKS\333X\026\216\203\023\234\204Nl0\340\004\047\3108!\320\314\220\022\220\006\362\230\214y$E:\235\216y$\231<Zs\221\257A\035[\262%\021p\017\231\320\263\362R\313\273\274\253)-U\263\322RK/\357RKU\365jv\375\023\346\\\311v\233LMMS6\226\317\373|\347;\367\372\321c\244TpI05\001U*\232\214L,\034*%,\310\373H\027\014SW\324=\241\254\351\002\350>H5d\356\377^\007\023\037\231\3175\320\232\373\310\024V\033\346\276\246\n\212!\224pE\331\305:\370U\032\241\275lb\235\033\251\302\213\365\027\177\\XZ\020\220Z\022t\374#\226MC0\016v\345\n2\014l\010ZY\330=P*\246\242\nf\243\206\215Ya\243,4\264\003A\305QA5\260\353u0\367\261*\030\330\344\017\302m\244\252\232\211LES%p\2072o\013%E\207$\312G\314\275\037\243\212\201g\245CE\225dM5\264\n\236\2555\216P\251$\201\037F{\215Y|\204\327\326\037\027v\236mK\205g\317\276\177\265\276&m|Wx\262\276%\255\024V\277]\177\276&I/\032G\360^\203\246\244\347\000\300&.KR;1\226\340\257|\240\312\374\263\212 \r\377\324J\007\225P\243\242j\370Y?@\225\316\263\211\r\023>\024\003*\322\265\003\350\034C1z\025U\224\237\260\304\361?\304%I\251\242=l\200#\326\033\321\027i\027\0318\014Rk\3646t\332\003\031\rUV\264\331nl\003\231&\222\367;\326R9\034u\047\326\356A\031^\222\001\251\345\n\257\004\342\232:\222\361.\222?\200\013|\325jXm{\311\341\300K\270\214u\0352\036\030Xo\303\216\217j\000:\310\014\023\351\246d*U\\V\324\222TSJ\322nC\352\022-\022\352\232\214\r\343\224b\017\233]9\3676\332)\367\243\336\303\276\253\212QE\246\334\026E\320DVJuOQ9\267\272m*j\215\267\377\3372\351#\326\225\262\002>\352G\200<*Q\323{\nWL\\5\272\205qpu\025\306\256}\010\221\350\024\031%\326\014n\303\337\020@\207P<\232\216\001\231^(\272\225\327\264Z\307\037Ut\214J\r\t\037A\276\222\216\r\016`/\244\006o\031\030oprkj\245\001\023+IX\205\315\002\372\303\020\320A\305\344\273V\203\355\250*\246\004K\210\032\340!C\336\020N\245\304\367\265\047\244$\357ch+*\035\272?\300\306\241\016\351\277@(\322\377\373\344_\277\374\343\347_~\376\347I\314\217\367\237|\266d\222\362\023W\232u?~\251)6W\232\330Z&\005\262Ect\230\226\355\025\273\354""\254:\246\273\350\335a\305m\266\375\212\275z\315^\277c\357v\331\256|\022\013\342i\353[Rg\302\2527\357\355\265\212<\244\336\034j\256[C\326J7t\020\277Fr~\374\234\237\270\324\\`W\246\355\224\235\267\267\234sN\321A\376\300\220%\372\211!6\304\305\267\354cW\344>\2725l)\244N/\330#v=H\200\215U\200t\331\353\376\365\033\277\016\2349\22781\233b;\370 \033\234\261E\273\300\223\037[\213\344\0261\351<E\364\023T^o\333\214\021\321\217\013L\270\347\346\334\373\036\362\352\221\361\274\205\374\304\345\346\007\222\"\271 ~\225\244\202\370\305f\256\371\220\364\221E\232\373\365\374\231s\227\233E\200D\014\342\243\026\370\214\200}<C\000\272a\253\330\3767hAo_\333\340\177\203\2006\307rw\235\"\373f\243\225n\025[ \350g\375WI\232lS\000\003l-\261\027\223,\201\262C?H\316\363]\3435\204\372\213\315Y\022\203\302\246y3\274\\\2639\337D\247cpH\331%\360\047\r\273\317\276\357\310\356\210kx\223\255\276\226\030\002\033@s\212U\047\027h\212N\3319{\321\231tcn\212\017b\321\312[\233\226I\026\210A\047\350\232\035\267W\355z\333i\240\271a\355\220\034`6p\245y\010s\034$\363d\217n\322\272\237\3448\200\364\357\234\"~2m\025\000\203\244\000\317\003Y\226\235\005\272\024\330\335\357Z\233\255^\253\320\007L\375\201Ak\232\210d\203\026\351\276\215\354CG\363\212\036\342\226f8\213d\252\347\031\274\202N=\353\300\007\304\243\214Z\237h\001*9\342\305\216X?\002O\257C$\335\311\270\241o\003F7\007Y\023\200\207\030\305cWr4M\337;9g\316y\357\345=\2507\025\014\014[oi\214\345V\2759\357=\333\334a;/;\315\016\023\231\216v\335\277\362\223@\316I\340\323\221m8y\247\350\247\207Ad-X\237CY\3359\357 \347\243[t\313^\301\213\264Y\362\024tunv\017j9K\363\364\r8\347@\031\200\354\0019\204\211\246\371\330\323\243\226\311\306\2000\316\276+{W[9\030\\\346\252\237\036g\343\\\250\270\307 \000#\035\252Rh\335\276\340\2148\206{\333K\201U\220\004&\202\274bO9\271 \t\024\047\205\000&\013,i\376D\206\200Y\321nq@Ek\rl3t\204\326\271\311\237\"u\322\212Y@\206h\210\021\261Nb\300B\350{d\324\2771\356\303\276\215\013|\337\316\3730\204\2470\202c*r\366\334\263\212V\205\346\370\343""\375h\317a\265!k\212]\273\003\223\211,\330\010\354e\310\320q Y.H$\255~6\272\340\024\376\357\316\206\206\2636\n`\331\372\t,\236@/\332\260.\327\310\024\233\230\2079\276e\177.\262\342\026\333z\303\336\274\365\343\343\334\006\000\010 \034\270\247X\212G\177\014#\027;\\/r\362\315\220\"A\341\242\363X\321\312\266\277\346h*\350n\242\337\263\235\341\272\303\023l[\220HYc\244\300\256?ru\357zKf\305\315N\370\035\222\047\257\350*\r\211\376\204\215\3159\267\234c\017\270{!\340\014\234\2409\272d\317\333\262\223\362al\375l|\331\345\373\376U\022\206\363(TF\365~\343\246\334I/\346u\314\356\273w\275\201\026\314*C.\202Y\270\221|\270+@\322k\020\020\265\355\n^;\3341?\271\374$\257\237\263\224\215\212N\312\231r\363\356_\302c/\235%OX~\331\035v+-\260\030cc\\?\355>\360B\272\316A#\323T\244\033\366Kg\336\331s\213m\00787!\374\340\220\317i\026\321\237\357!\250\307\3111\0149\r\360A\332t\236\212\001\020\373\203\315\t\352gn\205gFf\312>\013\323\343\202\366+\000J\037\021\203M,\002\233\247\302\235\314\344\351\003`N\34668\\\375\203]\260_;[n\037\334\006\\\022dx\332\354\014\233y\326*\264^\263\235\037\330\017\022\223\376\312\345\017aU\347\354mg\024\254\357zqo#<|\2623\366\222\263\354\256\270\310\317NR\315y\351\212\354AD\231m?;N\216\250\001%\t\234\240\00206\020n\322u{\030N\222\272\177\023\030\n\273\007\315\273\273\336Y\357\246W\206\234\333\335\353\357K\375\204\267\342\225Z\223\354\005D\207c\004\256\307\267\354\355\273@\310\323\005v\033\246\354N{\313\255\347@S\220\3727\357\2047\334\315yG\354\255=\305Kj\204(\t\267\340pDA\366k{\322\271\354\"\367o0\246,\307\243hW]\321]\363.\266f\330\016\277~\377\2078\200P&\313G\307\307\347\220\244ls\213\267\372\000V+l6B\037\346\225\001^\023\300~\202\317\256;\022\323]\202\353\034\361\221\210\264\320\326\362\025\213\246\014\204n~\"\253\360=\242\336\222{\016x\222\272\001\214\354\260v\301Y\207\343\370\224h\371K\301Cw\307\313\235\026-B\201\247\004\234\3751\276Q\217\311$\215\005p\372\327I,\370m\243G\370\245\300\316@m\301\225d\373\314\312M\234:\266\262a\245\277\353x\n\257\324D\263\217\377H""\001h\375\304\205S\257\321\014\004\016\342<R\335\212\2613O[p\200\300nO\33116\275\352\211\374,kX}\355\313\231\377\236Z\342?[\376\003,\303\2000";
+    PyObject *data = __Pyx_DecompressString(cstring, 2181, 1);
     #define __Pyx_DecompressString_LZSS_UNUSED
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #elif (CYTHON_COMPRESS_STRINGS) > 0 && (CYTHON_COMPRESS_STRINGS) <= 90 /* compression: lzss (2761 bytes) */
-static const char cstring[] = "\377?Failed \377to alloc\377ate wide\377 char st\377ring for\375 \031\000k_path~\t%textNoL\000\377that Cyt\377hon is d\277eliberf\000l}y\\\002cter \"\000\377n PEP-48\3774 and re\377jects su\377bclasses\377 of buil\377tin type\377s. If yo/u ne\274\003p%\000%\t\377then set\376[\000e \047anno\177tation_<\000\276\325\000\047 dirb\000i\373ve\374\001False\377._win_co\377nsole.py\337xadd_5\000ea\377gy.exeDE\377FAULT_AL\377LOWED_IM\377AGES_BAC\377KEND__Py\375x\001\000Dict_N\276\376\000Ref__r\004e\377____func\346\004\001mad\000\016\000mod\273ul\025\002nam\035\002q\367ual\004\005testv3\000is\217\000rou\367\000\375e\212\000rmaliz\373e_\255Awed_i\377mages_qu\367ery\007\003_bas\315eL\002py\305\t$\013as\377yncio.co\376U\004sattach\346\367\005_f\227bD\005buf\366\000\000_sx\000clin\373e_\246 trace\317back\257 \265 op\353en/\004c\354Bexp\374\303@\241\000start_\377timefind\377_pid_by_\374\314f\017\003rocess>\014\nget_p\021\004:\001\325s\216\004h\360\002_\260\"mi\037smatc\014\004\201#\265\003\237imgin\304a\312\006i\363np\303!\002\017_ver\377ifiedinv\334\334 \235\003or_\257\007it\367ems\376\204\006lowe\177rnextok\361\002\214\235\005\256#os\247\205\001\253\205\001>\000r\274\353\000\355\001reus\376\n_\356\262\005pop\335\005alr\177eady_exm\000\313ds\221as\222 \262\204\001on\373ly\324@d_ent\377ersetdef\357ault\242\206\001psu\377bmit_del?ay_sec\355 \267\"\363id\205\206\001\320\000uesw\361r\301\000\375\013\335D\351\200\262\343\377\202\201\343\201\246\200\001\330\377\004\007\200\177\220c\230\021\377\330\010\017\210q\330\004\013\377\2101\210B\210e\2209\377\230A\230S\240\001\240\025\377\240f\250B\250f\260C\377\260t\2707\300/\320Q\377T\320TW\320WX\320\377X\\\320\\b\320bc\377\200\001\340\004\024\220K\230\377q\320 C\3003\300g\373\310QO\001r\210\023\210E\357\220\023\220BR\006\340\004\032\377\230!\330\004\005\330\010\013\377\2104\320\017)\250\021\250\377#\250S\260\005\260Q\260\377a\330\014\023\2201\330\010\367\023\320\023\023\001%\250|\270\376\013\000\017\210r\220\025\220i\377\230q\240\t\250\026""\250q\333\340\010!\000\220Al\000\034\035\377\330\035\036\360\014\000\005\010\367\200t\210$\002q\340\004\022\177\320\022+\2501\250A\314\001\377|\2207\230%\230t\240_3\240a\240}\267\000q\327\002\377\340\004\033\2301\330\004 \377\320 :\270!\270;\300\367a\300q\047\0033\220a\330\377\010\016\210k\230\021\230!\377\340\004\031\230\021\340\004\n\377\210!\210=\230\003\2307\377\240!\360\006\000\005\016\210}Q\220 1\340\004\027\220\240 \335\026-\000\004\030\230\270 \025\220l\352\000\000\002\022\220\331\000*\250=\000\377\036\230a\330\004!\320!\3775\260Q\3206I\310\024\367\310Q\310\016\000\007\320\007\031\237\230\024\230T\240\345 )\000\220\014\257\005\217\"\034\230\264\0003\002z\000l\001q\032\200\001\214@\205\001.\230\001\226\000y)\311\001\250At\2103\210\254\000\3548\t\317!\320\013u\000\230y\250\377\003\250;\260c\270\026\270\177s\300&\310\003\3101\324\"\375\340\332\000i\220q\230\t\240\377\021\240(\250!\2507\260\357&\270\001\270\356@\013\2107\377\220#\220R\220t\2304\377\230s\240\"\240D\250\004\357\250C\250q.\004\014\210I\357\220U\230!\261 \014\017\210\375w\240`\022\2303\230g\240\237R\240q\330\020\204!\023\000~\276\237a\330\020\024\220A\206 \020\377 \240\001\330\014\034\320\034\375.\254`A\3205M\310R\215\310I\000\017\210\037\004/\002(\000\330\377\014\022\220)\2301\230I\377\240Q\240h\250a\250w\337\260o\300Q\300\201`\017\210{t\220\210A\020\021\330\014\003\006\272\357 \340\232a\340\010\014\316`\025\373\220a\377 \014\027\220}\240\365A\207\000x\251\001\026\220j\240\367\001\240\035G\000r\260\030\270\3727\002y\270@2\230S\240\010\366\215 1\330K\002\320\017!\240\377\024\240]\260!\2602\260\337]\300#\300Q\024\000\340\014\377\025\220[\240\001\320!C\377\3002\300]\320RU\320\367UV\330\346\004\025\230c\240\375\0276\006\r\330\020\023\320\023\375&\315`x\250s\260#\260\357Q\330\024\025\020\000\2204\220\375\177\017\002q\260\006\260a\260\377v\270Q\270f\300A\300\316\030\003\034\230J\375`\252 \023\220\377:\230S\240\002\240#\240\365Z:\000!8\000\340\020\023\220\177<\230w\240a\330\024\253a\277\024\027\220t\320""\033\256`\260\177h\270c\300\031\310!\266@\177\030\031\330\024\037\320\037\021\001\347i\270|\307@\"\000r\230\025\377\230i\240q\250\t\260\026\377\260s\270\047\300\021\330\030\357\031\340\020\030\236`\025\230l\177\250(\260!\340\020\033\326 \357A\340\010\013\242a\210z\230q\023\327`\326\205\003\331!1\220D\312`_\030\240\026\240q\037\001>\031\003\177\020\220\001\220\021\330\010\277C}\010\230\204\002\200\001\360\006\000\204@\377\026\027\330\036\037\330\034\035\326\351\205\001\006\330\377 J\375 |\240\3751\300\206\001:\220Q\220l\240u!\313\206\001;\272\207\003\013\2104p\000\357\021\320\032/\301`\010\013\210\336\037\000\320\026+\250*\001\320\013\375\037\337`!\340\010\020\220\007\237\320\0274\260A\220\206\036$\002.\377\250a\340\004\030\230\007\230\377q\330\004 \240\n\250!\377\330\004\032\230(\320\"3\376\302@[\320@Q\320QS\377\320SZ\320Z[\330\004\375\037 \001\033\2301\340\004\007\177\200q\330\010\021\320\021\213\207\001\321F\355@\251\002\345\204\001Q\366a+\230\207Q\230a\341\206\002H\001\252\206\003\010\004!\317\240\021\340\004\377\205\005\031\002\330\004\354\226\206\002\347\206\002\034\230\262\000\005\340\010\377\021\220\033\230A\320\035?\377\270r\300\035\310c\320Q\371R\315\210\001\304\205\001U\230#\230W\377\240C\240q\330\014\024\220\377G\320\0332\260%\260|\377\3001\340\010\t\340\014\017\377\320\017\"\240!\2408\250\2773\250c\260\021\330\261@\007\377\320\0379\270\021\360\006\000\277\r\020\210t\220?\030\0021\375\250\254\0016\270\021\270&\300\373\001\300\037\005;\2705\300\014\177\310A\330\014\030\230\nA\000\3711\231\205\001\326AB\230c\240\032ZN\000aH\004A\300H\004|\263\210\001\363\330\020\353\211\001\345`4\320\0271\377\260\021\260(\270#\270Y\376\357\210\002\024\034\230G\320#9\377\270\025\270l\310!\330\020\367\033\320\033\034\001)\270<\300\376\247\204\0022\220U\230)\2401\377\240I\250V\2603\260g\267\270Q\330+\003:\270\207\211\001\022\315\023/\000\2301\366\204\003\201\206\001Q\330/\024\037\230|\342@\024\274 \214`\377\024#\2401\340\024\036\230\273k\250\232\204\001\330\030%\254\207\002""\030\367(\250\002\273@\030\031\330\030\374\000\000\002\001\340\024\027\220x\230\377s\320\"7\260s\270(\376\214\206\002\030#\240<\250q\330\377\030\047\240q\330\031,\250\377A\250X\260S\270\003\270\3751\r\002\340\030\033\2307\240\377#\240U\250$\250i\260\377r\270\021\330\034+\2508\377\2609\270B\270a\330\034\377&\240o\260V\2701\320\375<\215cT\330\034\037\230x\353\240s\256` \375a /\250\377q\340 $\240E\250\025\277\250a\250q\330$\377`\260\375Q\331\001\270b\300\002\300$?\300f\310A\310T\323\214\006\020\r\377\"\300B\300d\310&\320\375P\356`U\320UX\320X\377[\320[\\\340 #\240\3674\320\047\303@\270)\3009\357\310N\320Z\022\001\330$/\336\272\214\002$3\2601\260\001=\250\237\003\2502\250T\362@\220\000y\376\201\" %\240Q\240a\340\377\034*\250&\260\016\270a\353\270{\204@\034\354\001Q\250m\377\2701\270D\300\n\310+\253\320U\330\215\001\330\001\023\340\333\000t\353\320#\226\207\003\177\200\204\002\320RS=\330\350\000<\260q\330\350\002\330#\377\240!\330\030\034\230A\230\327Q\330\030\374`\330\351\047t\270\2778\3003\300a\330\360 1\343\240A\027\004\277\205\001\300C\340\014\017\277\210}\230C\230q\243\204\0048\373\270\005\205`\021\036\230c\240~\265\204\0054\260E\270\021\330\006\n}9\001\r=\270U\300!\212\205\001\377F\230&\240\001\340\014\027O\220q\230\001\231\210\001\207\206\004\026\312\212\001\377\320\000\037\230q\340\017\020\255\330\347\207\003!\"\346\207\007\034~\002\010\234\264\207!\250\215\002\010\210\003\327\217\001\270`\330\343\010\t\000\000\000\003\010\001\027\030\340\375\004\233\210\001q\220\001\320\000J\377\310!\340\004\017\320\017(\177\250\001\320)C\3001\377\220\001\347y\220\003\215\216\004\377\220\0018\2201\003\220A";
-    PyObject *data = __Pyx_DecompressString_LZSS(cstring, 2761, 3372);
+    #elif (CYTHON_COMPRESS_STRINGS) > 0 && (CYTHON_COMPRESS_STRINGS) <= 90 /* compression: lzss (2836 bytes) */
+static const char cstring[] = "\377?Failed \377to alloc\377ate wide\377 char st\377ring for\375 \031\000k_path~\t%textNoL\000\377that Cyt\377hon is d\277eliberf\000l}y\\\002cter \"\000\377n PEP-48\3774 and re\377jects su\377bclasses\377 of buil\377tin type\377s. If yo/u ne\274\003p%\000%\t\377then set\376[\000e \047anno\177tation_<\000\276\325\000\047 dirb\000i\373ve\374\001False\377._win_co\377nsole.py\337xadd_5\000ea\377gy.exeDE\377FAULT_AL\377LOWED_IM\377AGES_BAC\377KEND__Py\375x\001\000Dict_N\276\376\000Ref__r\004e\377____func\346\004\001mad\000\016\000mod\273ul\025\002nam\035\002q\367ual\004\005testv3\000is\217\000rou\367\000\375e\212\000rmaliz\373e_\255Awed_i\377mages_qu\367ery\007\003_bas\315eL\002py\305\t$\013as\377yncio.co\376U\004sattach\346\367\005_f\227bD\005buf\366\000\000_sx\000clin\373e_\246 trace\317back\257 \265 op\353en/\004c\354Bdef\367err\241\000user\316\360$exp\327@\265\000st\377art_time\377find_pid\317_by_\340f\017\003ro\357cess\014\ngetS_p\021\004:\001s\242\004h\204\"\375_\304\"mismat\361c\014\004\225#\311\003imgi9n\330a\336\006inp\327!\002\017\377_verifie\317dinv\360 \235\003or}_\257\007items\222\205\006\377lowernex\307tok\205\"\235\005\302#os\310\273\205\001\277\205\001>\000r\353\000\355\001re\352\227 dG\010_\262\005pop\376\335\005already\367_exm\000dres*\275!_\310(s\270as\245 \331\204\001\357only\373@d_e\177nterset\202@\357ault\311\206\001psu\377bmit_del?ay_sec\200@\312\"\363id\254\206\001\233H_che\363ck\374D\373\000uesw\361r\354\000\250+\234d\351\200\262\343\377\202\201\343\201\246\200\001\330\377\004\007\200\177\220c\230\021\377\330\010\017\210q\330\004\013\377\2101\210B\210e\2209\377\230A\230S\240\001\240\025\377\240f\250B\250f\260C\377\260t\2707\300/\320Q\377T\320TW\320WX\320\377X\\\320\\b\320bc\377\200\001\340\004\024\220K\230\377q\320 C\3003\300g\373\310QO\001r\210\023\210E\357\220\023\220BR\006\340\004\032\377\230!\330\004\005\330\010\013\377\2104\320\017)\250\021\250\377#\250S\260\005\260Q\260\377a\330\014\023\2201\330\010\367\023\320\023\023\001%\250|\270\376""\013\000\017\210r\220\025\220i\377\230q\240\t\250\026\250q\333\340\010!\000\220Al\000\034\035\377\330\035\036\360\014\000\005\010\367\200t\210$\002q\340\004\022\177\320\022+\2501\250A\314\001\377|\2207\230%\230t\240_3\240a\240}\267\000q\327\002\377\340\004\033\2301\330\004 \377\320 :\270!\270;\300\367a\300q\047\0033\220a\330\377\010\016\210k\230\021\230!\377\340\004\031\230\021\340\004\n\377\210!\210=\230\003\2307\377\240!\360\006\000\005\016\210}Q\220 1\340\004\027\220\240 \335\026-\000\004\030\230\270 \025\220l\352\000\000\002\022\220\331\000*\250=\000\377\036\230a\330\004!\320!\3775\260Q\3206I\310\024\367\310Q\310\016\000\007\320\007\031\237\230\024\230T\240\345 )\000\220\014\257\005\217\"\034\230\264\0003\002z\000l\001q\032\200\001\214@\205\001.\230\001\226\000y)\311\001\250At\2103\210\254\000\3548\t\317!\320\013u\000\230y\250\377\003\250;\260c\270\026\270\177s\300&\310\003\3101\324\"\375\340\332\000i\220q\230\t\240\377\021\240(\250!\2507\260\357&\270\001\270\356@\013\2107\377\220#\220R\220t\2304\377\230s\240\"\240D\250\004\357\250C\250q.\004\014\210I\357\220U\230!\261 \014\017\210\375w\240`\022\2303\230g\240\237R\240q\330\020\204!\023\000~\276\237a\330\020\024\220A\206 \020\377 \240\001\330\014\034\320\034\375.\254`A\3205M\310R\215\310I\000\017\210\037\004/\002(\000\330\377\014\022\220)\2301\230I\377\240Q\240h\250a\250w\337\260o\300Q\300\201`\017\210{t\220\210A\020\021\330\014\003\006\272\357 \340\232a\340\010\014\316`\025\373\220a\377 \014\027\220}\240\365A\207\000x\251\001\026\220j\240\367\001\240\035G\000r\260\030\270\3727\002y\270@2\230S\240\010\366\215 1\330K\002\320\017!\240\377\024\240]\260!\2602\260\337]\300#\300Q\024\000\340\014\377\025\220[\240\001\320!C\377\3002\300]\320RU\320\367UV\330\346\004\025\230c\240\375\0276\006\r\330\020\023\320\023\375&\315`x\250s\260#\260\357Q\330\024\025\020\000\2204\220\375\177\017\002q\260\006\260a\260\377v\270Q\270f\300A\300\316\030\003\034\230J\375`\252 \023\220\377:\230S\240\002\240#\240\365Z:\000!8\000\340\020\023""\220\177<\230w\240a\330\024\253a\277\024\027\220t\320\033\256`\260\177h\270c\300\031\310!\266@\177\030\031\330\024\037\320\037\021\001\347i\270|\307@\"\000r\230\025\377\230i\240q\250\t\260\026\377\260s\270\047\300\021\330\030\357\031\340\020\030\236`\025\230l\177\250(\260!\340\020\033\326 \357A\340\010\013\242a\210z\230q\023\327`\326\205\003\331!1\220D\312`_\030\240\026\240q\037\001>\031\003\177\020\220\001\220\021\330\010\277C}\010\230\204\002\200\001\360\006\000\204@\377\026\027\330\036\037\330\034\035\267\330\037 \354\205\001\006\330\202@J\356\200@|\2401\303\206\001:\220Q\257\220l\240!\316\206\001;\275\207\003\013{\2104s\000\021\320\032/\304`\367\010\013\210\037\000\320\026+\250\356*\001\320\013\037\342`!\340\010\377\020\220\007\320\0274\260A\374\223\206\036$\002.\250a\340\004\030\377\230\007\230q\330\004 \240\377\n\250!\330\004\032\230(\367\320\"3\305@[\320@Q\377\320QS\320SZ\320Z\357[\330\004\037 \001\033\2301\377\340\004\007\200q\330\010\021\213\320\021\216\207\001F\360@\251\002\350\204\001Q>\371a+\230Q\230a\344\206\002H\001|\255\206\003\010\004!\240\021\340\004\202\206\005f\031\002\330\004\231\206\002\352\206\002\034\230\262\000\377\005\340\010\021\220\033\230A\377\320\035?\270r\300\035\310\317c\320QR\320\210\001\307\205\001U\230\377#\230W\240C\240q\330\377\014\024\220G\320\0332\260\377%\260|\3001\340\010\t\377\340\014\017\320\017\"\240!\377\2408\2503\250c\260\021\375\330\264@\007\320\0379\270\021\377\360\006\000\r\020\210t\220\355?\030\0021\250\254\0016\270\021\337\270&\300\001\300\037\005;\270\3775\300\014\310A\330\014\030\313\230\nA\0001\234\205\001\331AB\230\327c\240\032N\000aH\004A\300\232H\004|\266\210\001\330\020\356\211\001\350`4\377\320\0271\260\021\260(\270\367#\270Y\362\210\002\024\034\230G\377\320#9\270\025\270l\310\277!\330\020\033\320\033\034\001)\367\270<\300\252\204\0022\220U\230\377)\2401\240I\250V\260\2773\260g\270Q\330+\003:m\270\212\211\001\022\023/\000\2301\371\204\003~\204\206\001Q\330\024\037\230|\342@\371\024\274 \214`\024#\2401\340""\337\024\036\230k\250\235\204\001\330\030\275%\257\207\002\030(\250\002\273@\030\347\031\330\030\000\000\002\001\340\024\027\377\220x\230s\320\"7\260\367s\270(\217\206\002\030#\240<\377\250q\330\030\047\240q\330\377\031,\250A\250X\260So\270\003\2701\r\002\340\030\275\212\001\377\034+\320+L\310A\310\377X\320U^\320^_\320\373_`\024\001=\250\003\2502\357\250T\260\027+\0005\300\004\373\300I\370\207\002\034+\2508\260\3779\270B\270a\330\034&\377\240o\260V\2701\320<\376\255cT\330\034\037\230x\240\365s\316` \235\204\001 /\250q\377\340 $\240E\250\025\250\377a\250q\330$4\260A\373\260Q\371\001\270b\300\002\300\227$\300fq\000T\366\214\006\020\r\"\377\300B\300d\310&\320P\377Q\320QU\320UX\320\377X[\320[\\\340 #\357\2404\320\047\343@\270)\300\3379\310N\320Z\022\001\330$\275/\335\214\002$3\2601\260\t\021\372\217\001y\241\" %\240Q\240\377a\340\034*\250&\260\016\257\270a\270{\244@\034\214!Q\377\250m\2701\270D\300\n\257\310+\320U\373\215\001\330\001\023\340\256\333\000t\320#\271\207\003\177\240\204\002\320\367RS\330\350\000<\260q\330\374\350\002\370#\240!\330\030\034\230?A\230Q\330\030\"\270A\212F\377t\2708\3003\300a\330\216\220@1\240A\027\004\337\205\001\340C\340\377\014\017\210}\230C\230q\356\303\204\0048\270\005\245`\021\036\230\373c\240\325\204\0054\260E\270\021\365\330\006\n9\001\r=\270U\300E!\026\0137\236\000;\n\372\204\001\001\316\205\001\377F\230&\240\001\340\014\027O\220q\230\001\340\210\001\313\206\004\026\221\213\001\377\320\000\037\230q\340\017\020\255\330\256\210\003!\"\252\210\n\034\245\002\010\234\373\207!\362\215\002\010\210\003\241\220\001\377`\330\343\010\t\000\000\000\003\010\001\027\030\330\357\034\035\340\004\345\210\001q\220\001\377\320\000J\310!\340\004\017\377\320\017(\250\001\320)C;\3001\314\221\001y\220\003\332\216\004\314\221\001\0378\2201\220A";
+    PyObject *data = __Pyx_DecompressString_LZSS(cstring, 2836, 3512);
     #define __Pyx_DecompressString_UNUSED
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #else /* compression: none (3372 bytes) */
-static const char bytes[] = "?Failed to allocate wide char string for lock_pathFailed to allocate wide char string for textNote that Cython is deliberately stricter than PEP-484 and rejects subclasses of builtin types. If you need to pass subclasses then set the \047annotation_typing\047 directive to False._win_console.pyxadd_noteagy.exeDEFAULT_ALLOWED_IMAGES_BACKEND__Pyx_PyDict_NextRef__annotate____func____main____module____name____qualname____test___is_coroutine_normalize_allowed_images_query_image_basename_py_win_consoleallowed_imagesasyncio.coroutinesattach_console_failedbasenamebufbuf_sizecline_in_tracebackconin_open_failedcythonexpected_start_timefind_pid_by_lock_pathfind_process_by_lock_pathget_process_times_failedhimage_name_mismatchimage_query_failedimginject_console_inputinject_console_input_verifiedinvalid_pid_or_start_timeitemslock_pathlowernextokopen_process_failedospathpath_strpidpid_reused_start_time_mismatchpopprocess_already_exitedsame_session_onlysend_entersetdefaultstripsubmit_delay_sectarget_pidtextvalueswrite_console_input_failed\351\200\262\343\202\201\343\201\246\200\001\330\004\007\200\177\220c\230\021\330\010\017\210q\330\004\013\2101\210B\210e\2209\230A\230S\240\001\240\025\240f\250B\250f\260C\260t\2707\300/\320QT\320TW\320WX\320X\\\320\\b\320bc\200\001\340\004\024\220K\230q\320 C\3003\300g\310Q\330\004\007\200r\210\023\210E\220\023\220B\220c\230\021\330\010\017\210q\340\004\032\230!\330\004\005\330\010\013\2104\320\017)\250\021\250#\250S\260\005\260Q\260a\330\014\023\2201\330\010\023\320\023)\250\021\250%\250|\2701\330\010\017\210r\220\025\220i\230q\240\t\250\026\250q\340\010\023\2201\220A\200\001\340\034\035\330\035\036\360\014\000\005\010\200t\2101\330\010\017\210q\340\004\022\320\022+\2501\250A\330\004\007\200|\2207\230%\230t\2403\240a\240}\260C\260q\330\010\017\210q\340\004\033\2301\330\004 \320 :\270!\270;\300a\300q\330\004\007\200|\2203\220a\330\010\016\210k\230\021\230!\340\004\031\230\021\340\004\n\210!\210=\230\003\2307\240!\360\006\000\005\016\210Q\210e\2201""\340\004\027\220q\330\004\026\220a\330\004\030\230\001\330\004\025\220Q\330\004\025\220Q\330\004\022\220!\330\004*\250!\340\004\036\230a\330\004!\320!5\260Q\3206I\310\024\310Q\310a\330\004\007\320\007\031\230\024\230T\240\021\330\010\022\220!\2201\330\010\017\210q\340\004\032\230!\330\004\034\230A\330\004\036\230a\330\004\031\230\021\360\006\000\005\032\230\021\340\004\017\210q\340\004\n\210.\230\001\230\021\230)\2403\240a\330\004\007\200t\2103\210a\330\010\022\220!\2201\330\010\017\210q\340\004\005\330\010\013\320\013\036\230a\230y\250\003\250;\260c\270\026\270s\300&\310\003\3101\330\014\023\2201\340\010\016\210i\220q\230\t\240\021\240(\250!\2507\260&\270\001\270\021\330\010\013\2107\220#\220R\220t\2304\230s\240\"\240D\250\004\250C\250q\330\014\023\2201\340\010\014\210I\220U\230!\2301\330\014\017\210w\220c\230\022\2303\230g\240R\240q\330\020\027\220q\330\014\017\210~\230S\240\001\330\020\024\220A\220Q\330\020 \240\001\330\014\034\320\034.\250f\260A\3205M\310R\310q\330\014\017\210~\230S\240\001\330\020\027\220q\330\014\024\220A\330\014\022\220)\2301\230I\240Q\240h\250a\250w\260o\300Q\300a\330\014\017\210t\2203\220a\330\020\021\330\014\017\210t\2203\220a\330\020\027\220q\340\014\023\2201\340\010\014\210E\220\025\220a\220q\330\014\027\220}\240A\240R\240x\250q\330\014\026\220j\240\001\240\035\250a\250r\260\030\270\021\330\014\017\210y\230\003\2302\230S\240\010\250\003\2501\330\020\021\330\014\017\320\017!\240\024\240]\260!\2602\260]\300#\300Q\330\020\021\340\014\025\220[\240\001\320!C\3002\300]\320RU\320UV\330\014\017\210w\220c\230\025\230c\240\027\250\003\2501\330\020\021\330\014\r\330\020\023\320\023&\240a\240x\250s\260#\260Q\330\024\025\330\020\023\2204\220\177\240a\240x\250q\260\006\260a\260v\270Q\270f\300A\300Q\330\024\025\330\020\034\230J\240a\240q\330\020\023\220:\230S\240\002\240#\240Z\250s\260!\330\024\025\340\020\023\220<\230w\240a\330\024\036\230a\330\024\027\220t\320\0335\260Q\260h\270c\300\031\310!\3101\330\030\031\330\024\037\320\0375\260Q\260i\270|\3101""\330\024\027\220r\230\025\230i\240q\250\t\260\026\260s\270\047\300\021\330\030\031\340\020\030\230\001\230\025\230l\250(\260!\340\020\033\2301\230A\340\010\013\2103\210a\210z\230\023\230A\330\014\023\2201\330\010\017\210t\2201\220D\230\001\230\030\240\026\240q\340\010\013\210>\230\023\230A\330\014\020\220\001\220\021\330\010\024\220A\220Q\330\010\022\220!\2201\200\001\360\006\000\020\021\330\026\027\330\036\037\330\034\035\360\014\000\005\006\330\010\014\210J\220a\220|\2401\330\010\013\210:\220Q\220l\240!\330\010\013\210;\220c\230\021\330\010\013\2104\210z\230\021\320\032/\250q\330\010\013\210:\220Q\320\026+\2501\330\010\013\320\013\037\230s\240!\340\010\020\220\007\320\0274\260A\340\004\022\320\022+\2501\250A\330\004\007\200|\2207\230%\230t\2403\240a\240}\260C\260q\330\010\020\220\007\320\027.\250a\340\004\030\230\007\230q\330\004 \240\n\250!\330\004\032\230(\320\"3\2602\260[\320@Q\320QS\320SZ\320Z[\330\004\037\230q\330\004\033\2301\340\004\007\200q\330\010\021\320\021+\2501\250F\260!\2601\330\010\013\2107\220#\220Q\330\014\022\220+\230Q\230a\340\004\031\230\021\330\004\032\230!\340\004\036\230a\340\004\031\230\021\330\004!\240\021\340\004\036\230a\330\004\031\230\021\330\004\032\230!\330\004\034\230A\330\004\030\230\001\330\004\034\230A\340\004\005\340\010\021\220\033\230A\320\035?\270r\300\035\310c\320QR\330\010\013\2107\220#\220U\230#\230W\240C\240q\330\014\024\220G\320\0332\260%\260|\3001\340\010\t\340\014\017\320\017\"\240!\2408\2503\250c\260\021\330\020\030\230\007\320\0379\270\021\360\006\000\r\020\210t\220?\240!\2408\2501\250F\260!\2606\270\021\270&\300\001\300\021\330\020\030\230\007\320\037;\2705\300\014\310A\330\014\030\230\n\240!\2401\330\014\017\210z\230\023\230B\230c\240\032\2503\250a\330\020\030\230\007\320\037A\300\021\360\006\000\r\020\210|\2307\240!\330\020\032\230!\330\020\023\2204\320\0271\260\021\260(\270#\270Y\300a\300q\330\024\034\230G\320#9\270\025\270l\310!\330\020\033\320\0331\260\021\260)\270<\300q\330\020\023\2202\220U\230)\2401\240I""\250V\2603\260g\270Q\330\024\034\230G\320#:\270!\360\006\000\022\023\330\020\033\2301\330\020\023\2204\220}\240A\240Q\330\024\037\230|\2501\330\024!\240\021\240!\330\024#\2401\340\024\036\230k\250\021\330\030\031\330\030%\240R\240q\330\030(\250\002\250!\330\030\031\330\030\031\330\030\031\330\030\031\340\024\027\220x\230s\320\"7\260s\270(\300#\300Q\330\030#\240<\250q\330\030\047\240q\330\031,\250A\250X\260S\270\003\2701\330\030\047\240q\340\030\033\2307\240#\240U\250$\250i\260r\270\021\330\034+\2508\2609\270B\270a\330\034&\240o\260V\2701\320<Q\320QS\320ST\330\034\037\230x\240s\250!\330 +\2501\330 /\250q\340 $\240E\250\025\250a\250q\330$4\260A\260Q\260g\270Q\270b\300\002\300$\300f\310A\310T\320QT\320TW\320WX\330$4\260A\260Q\260g\270Q\270b\300\002\300\"\300B\300d\310&\320PQ\320QU\320UX\320X[\320[\\\340 #\2404\320\0479\270\021\270)\3009\310N\320Z[\320[\\\330$/\250|\2701\330$3\2601\340\030\033\230=\250\003\2502\250T\260\021\330\034\037\230y\250\002\250!\330 %\240Q\240a\340\034*\250&\260\016\270a\270{\310!\330\034,\250A\250Q\250m\2701\270D\300\n\310+\320Ub\320bc\330\034,\250A\250Q\250m\2701\270D\300\n\310+\320Ub\320bc\340\034\037\230t\320#5\260Q\260i\270\177\310c\320QR\320RS\330 +\250<\260q\330 /\250q\340\024\027\220x\230s\240!\330\030\034\230A\230Q\330\030\"\240!\330\024\027\220x\230s\320\"7\260t\2708\3003\300a\330\030#\2401\240A\330\030\"\240!\330\024\037\230q\330\024!\240\021\240!\340\014\017\210}\230C\230q\330\020\030\230\007\320\0378\270\005\270Q\330\021\036\230c\240\021\330\020\030\230\007\320\0374\260E\270\021\330\021\036\230c\240\021\330\020\030\230\007\320\0379\270\021\330\021\036\230c\240\021\330\020\030\230\007\320\037=\270U\300!\330\014\024\220F\230&\240\001\340\014\027\220q\230\001\340\010\013\2107\220#\220Q\330\014\026\220a\220q\320\000\037\230q\340\017\020\330\026\027\330\036\037\330!\"\330\034\035\360\014\000\005\006\330\010\034\230C\230q\330\010\013\2104\210z\230\021\320\032/\250q\330\010\013\210:\220Q\320\026+\2501\330\010\013\320\013\037\230s\240!\340""\010\017\210q\340\004\010\210\003\2104\320\017,\250A\330\010\t\330\010\t\330\010\t\330\010\t\330\010\t\330\027\030\340\004\013\2104\210q\220\001\320\000J\310!\340\004\017\320\017(\250\001\320)C\3001\330\004\007\200y\220\003\2201\330\010\017\210q\330\004\013\2108\2201\220A";
+    #else /* compression: none (3512 bytes) */
+static const char bytes[] = "?Failed to allocate wide char string for lock_pathFailed to allocate wide char string for textNote that Cython is deliberately stricter than PEP-484 and rejects subclasses of builtin types. If you need to pass subclasses then set the \047annotation_typing\047 directive to False._win_console.pyxadd_noteagy.exeDEFAULT_ALLOWED_IMAGES_BACKEND__Pyx_PyDict_NextRef__annotate____func____main____module____name____qualname____test___is_coroutine_normalize_allowed_images_query_image_basename_py_win_consoleallowed_imagesasyncio.coroutinesattach_console_failedbasenamebufbuf_sizecline_in_tracebackconin_open_failedcythondeferred_user_typingexpected_start_timefind_pid_by_lock_pathfind_process_by_lock_pathget_process_times_failedhimage_name_mismatchimage_query_failedimginject_console_inputinject_console_input_verifiedinvalid_pid_or_start_timeitemslock_pathlowernextokopen_process_failedospathpath_strpidpid_reused_start_time_mismatchpopprocess_already_exitedrespect_user_typingsame_session_onlysend_entersetdefaultstripsubmit_delay_sectarget_pidtextuser_typing_check_failedvalueswrite_console_input_failed\351\200\262\343\202\201\343\201\246\200\001\330\004\007\200\177\220c\230\021\330\010\017\210q\330\004\013\2101\210B\210e\2209\230A\230S\240\001\240\025\240f\250B\250f\260C\260t\2707\300/\320QT\320TW\320WX\320X\\\320\\b\320bc\200\001\340\004\024\220K\230q\320 C\3003\300g\310Q\330\004\007\200r\210\023\210E\220\023\220B\220c\230\021\330\010\017\210q\340\004\032\230!\330\004\005\330\010\013\2104\320\017)\250\021\250#\250S\260\005\260Q\260a\330\014\023\2201\330\010\023\320\023)\250\021\250%\250|\2701\330\010\017\210r\220\025\220i\230q\240\t\250\026\250q\340\010\023\2201\220A\200\001\340\034\035\330\035\036\360\014\000\005\010\200t\2101\330\010\017\210q\340\004\022\320\022+\2501\250A\330\004\007\200|\2207\230%\230t\2403\240a\240}\260C\260q\330\010\017\210q\340\004\033\2301\330\004 \320 :\270!\270;\300a\300q\330\004\007\200|\2203\220a\330\010\016\210k\230\021\230!\340\004\031\230\021\340\004""\n\210!\210=\230\003\2307\240!\360\006\000\005\016\210Q\210e\2201\340\004\027\220q\330\004\026\220a\330\004\030\230\001\330\004\025\220Q\330\004\025\220Q\330\004\022\220!\330\004*\250!\340\004\036\230a\330\004!\320!5\260Q\3206I\310\024\310Q\310a\330\004\007\320\007\031\230\024\230T\240\021\330\010\022\220!\2201\330\010\017\210q\340\004\032\230!\330\004\034\230A\330\004\036\230a\330\004\031\230\021\360\006\000\005\032\230\021\340\004\017\210q\340\004\n\210.\230\001\230\021\230)\2403\240a\330\004\007\200t\2103\210a\330\010\022\220!\2201\330\010\017\210q\340\004\005\330\010\013\320\013\036\230a\230y\250\003\250;\260c\270\026\270s\300&\310\003\3101\330\014\023\2201\340\010\016\210i\220q\230\t\240\021\240(\250!\2507\260&\270\001\270\021\330\010\013\2107\220#\220R\220t\2304\230s\240\"\240D\250\004\250C\250q\330\014\023\2201\340\010\014\210I\220U\230!\2301\330\014\017\210w\220c\230\022\2303\230g\240R\240q\330\020\027\220q\330\014\017\210~\230S\240\001\330\020\024\220A\220Q\330\020 \240\001\330\014\034\320\034.\250f\260A\3205M\310R\310q\330\014\017\210~\230S\240\001\330\020\027\220q\330\014\024\220A\330\014\022\220)\2301\230I\240Q\240h\250a\250w\260o\300Q\300a\330\014\017\210t\2203\220a\330\020\021\330\014\017\210t\2203\220a\330\020\027\220q\340\014\023\2201\340\010\014\210E\220\025\220a\220q\330\014\027\220}\240A\240R\240x\250q\330\014\026\220j\240\001\240\035\250a\250r\260\030\270\021\330\014\017\210y\230\003\2302\230S\240\010\250\003\2501\330\020\021\330\014\017\320\017!\240\024\240]\260!\2602\260]\300#\300Q\330\020\021\340\014\025\220[\240\001\320!C\3002\300]\320RU\320UV\330\014\017\210w\220c\230\025\230c\240\027\250\003\2501\330\020\021\330\014\r\330\020\023\320\023&\240a\240x\250s\260#\260Q\330\024\025\330\020\023\2204\220\177\240a\240x\250q\260\006\260a\260v\270Q\270f\300A\300Q\330\024\025\330\020\034\230J\240a\240q\330\020\023\220:\230S\240\002\240#\240Z\250s\260!\330\024\025\340\020\023\220<\230w\240a\330\024\036\230a\330\024\027\220t\320\0335\260Q\260h\270c\300""\031\310!\3101\330\030\031\330\024\037\320\0375\260Q\260i\270|\3101\330\024\027\220r\230\025\230i\240q\250\t\260\026\260s\270\047\300\021\330\030\031\340\020\030\230\001\230\025\230l\250(\260!\340\020\033\2301\230A\340\010\013\2103\210a\210z\230\023\230A\330\014\023\2201\330\010\017\210t\2201\220D\230\001\230\030\240\026\240q\340\010\013\210>\230\023\230A\330\014\020\220\001\220\021\330\010\024\220A\220Q\330\010\022\220!\2201\200\001\360\006\000\020\021\330\026\027\330\036\037\330\034\035\330\037 \360\014\000\005\006\330\010\014\210J\220a\220|\2401\330\010\013\210:\220Q\220l\240!\330\010\013\210;\220c\230\021\330\010\013\2104\210z\230\021\320\032/\250q\330\010\013\210:\220Q\320\026+\2501\330\010\013\320\013\037\230s\240!\340\010\020\220\007\320\0274\260A\340\004\022\320\022+\2501\250A\330\004\007\200|\2207\230%\230t\2403\240a\240}\260C\260q\330\010\020\220\007\320\027.\250a\340\004\030\230\007\230q\330\004 \240\n\250!\330\004\032\230(\320\"3\2602\260[\320@Q\320QS\320SZ\320Z[\330\004\037\230q\330\004\033\2301\340\004\007\200q\330\010\021\320\021+\2501\250F\260!\2601\330\010\013\2107\220#\220Q\330\014\022\220+\230Q\230a\340\004\031\230\021\330\004\032\230!\340\004\036\230a\340\004\031\230\021\330\004!\240\021\340\004\036\230a\330\004\031\230\021\330\004\032\230!\330\004\034\230A\330\004\030\230\001\330\004\034\230A\340\004\005\340\010\021\220\033\230A\320\035?\270r\300\035\310c\320QR\330\010\013\2107\220#\220U\230#\230W\240C\240q\330\014\024\220G\320\0332\260%\260|\3001\340\010\t\340\014\017\320\017\"\240!\2408\2503\250c\260\021\330\020\030\230\007\320\0379\270\021\360\006\000\r\020\210t\220?\240!\2408\2501\250F\260!\2606\270\021\270&\300\001\300\021\330\020\030\230\007\320\037;\2705\300\014\310A\330\014\030\230\n\240!\2401\330\014\017\210z\230\023\230B\230c\240\032\2503\250a\330\020\030\230\007\320\037A\300\021\360\006\000\r\020\210|\2307\240!\330\020\032\230!\330\020\023\2204\320\0271\260\021\260(\270#\270Y\300a\300q\330\024\034\230G\320#9\270\025\270l\310!\330\020""\033\320\0331\260\021\260)\270<\300q\330\020\023\2202\220U\230)\2401\240I\250V\2603\260g\270Q\330\024\034\230G\320#:\270!\360\006\000\022\023\330\020\033\2301\330\020\023\2204\220}\240A\240Q\330\024\037\230|\2501\330\024!\240\021\240!\330\024#\2401\340\024\036\230k\250\021\330\030\031\330\030%\240R\240q\330\030(\250\002\250!\330\030\031\330\030\031\330\030\031\330\030\031\340\024\027\220x\230s\320\"7\260s\270(\300#\300Q\330\030#\240<\250q\330\030\047\240q\330\031,\250A\250X\260S\270\003\2701\330\030\047\240q\340\030\033\2301\330\034+\320+L\310A\310X\320U^\320^_\320_`\340\030\033\230=\250\003\2502\250T\260\027\270\003\2705\300\004\300I\310R\310q\330\034+\2508\2609\270B\270a\330\034&\240o\260V\2701\320<Q\320QS\320ST\330\034\037\230x\240s\250!\330 +\2501\330 /\250q\340 $\240E\250\025\250a\250q\330$4\260A\260Q\260g\270Q\270b\300\002\300$\300f\310A\310T\320QT\320TW\320WX\330$4\260A\260Q\260g\270Q\270b\300\002\300\"\300B\300d\310&\320PQ\320QU\320UX\320X[\320[\\\340 #\2404\320\0479\270\021\270)\3009\310N\320Z[\320[\\\330$/\250|\2701\330$3\2601\340\030\033\230=\250\003\2502\250T\260\021\330\034\037\230y\250\002\250!\330 %\240Q\240a\340\034*\250&\260\016\270a\270{\310!\330\034,\250A\250Q\250m\2701\270D\300\n\310+\320Ub\320bc\330\034,\250A\250Q\250m\2701\270D\300\n\310+\320Ub\320bc\340\034\037\230t\320#5\260Q\260i\270\177\310c\320QR\320RS\330 +\250<\260q\330 /\250q\340\024\027\220x\230s\240!\330\030\034\230A\230Q\330\030\"\240!\330\024\027\220x\230s\320\"7\260t\2708\3003\300a\330\030#\2401\240A\330\030\"\240!\330\024\037\230q\330\024!\240\021\240!\340\014\017\210}\230C\230q\330\020\030\230\007\320\0378\270\005\270Q\330\021\036\230c\240\021\330\020\030\230\007\320\0374\260E\270\021\330\021\036\230c\240\021\330\020\030\230\007\320\0379\270\021\330\021\036\230c\240\021\330\020\030\230\007\320\037=\270U\300!\330\021\036\230c\240\021\330\020\030\230\007\320\0377\260q\330\021\036\230c\240\021\330\020\030\230\007\320\037;\2705\300\001\330\014\024\220F\230&\240\001\340\014\027\220q""\230\001\340\010\013\2107\220#\220Q\330\014\026\220a\220q\320\000\037\230q\340\017\020\330\026\027\330\036\037\330!\"\330\034\035\330\037 \360\014\000\005\006\330\010\034\230C\230q\330\010\013\2104\210z\230\021\320\032/\250q\330\010\013\210:\220Q\320\026+\2501\330\010\013\320\013\037\230s\240!\340\010\017\210q\340\004\010\210\003\2104\320\017,\250A\330\010\t\330\010\t\330\010\t\330\010\t\330\010\t\330\027\030\330\034\035\340\004\013\2104\210q\220\001\320\000J\310!\340\004\017\320\017(\250\001\320)C\3001\330\004\007\200y\220\003\2201\330\010\017\210q\330\004\013\2108\2201\220A";
     PyObject *data = NULL;
     #define __Pyx_DecompressString_UNUSED
     #define __Pyx_DecompressString_LZSS_UNUSED
     #endif
     PyObject **stringtab = __pyx_mstate->__pyx_string_tab;
     Py_ssize_t pos = 0;
-    for (int i = 0; i < 64; i++) {
+    for (int i = 0; i < 67; i++) {
       Py_ssize_t bytes_length = str_length_index[i].length;
       PyObject *string = PyUnicode_DecodeUTF8(bytes + pos, bytes_length, NULL);
       if (likely(string) && i >= 7) PyUnicode_InternInPlace(&string);
@@ -9436,8 +11454,8 @@ static const char bytes[] = "?Failed to allocate wide char string for lock_pathF
       stringtab[i] = string;
       pos += bytes_length;
     }
-    for (int i = 64; i < 70; i++) {
-      Py_ssize_t bytes_length = bytes_length_index[i-64].length;
+    for (int i = 67; i < 73; i++) {
+      Py_ssize_t bytes_length = bytes_length_index[i-67].length;
       PyObject *string = PyBytes_FromStringAndSize(bytes + pos, bytes_length);
       stringtab[i] = string;
       pos += bytes_length;
@@ -9447,14 +11465,14 @@ static const char bytes[] = "?Failed to allocate wide char string for lock_pathF
       }
     }
     Py_XDECREF(data);
-    for (Py_ssize_t i = 0; i < 70; i++) {
+    for (Py_ssize_t i = 0; i < 73; i++) {
       if (unlikely(PyObject_Hash(stringtab[i]) == -1)) {
         __PYX_ERR(0, 1, __pyx_L1_error)
       }
     }
     #if CYTHON_IMMORTAL_CONSTANTS
     {
-      PyObject **table = stringtab + 64;
+      PyObject **table = stringtab + 67;
       for (Py_ssize_t i=0; i<6; ++i) {
         #if PY_VERSION_HEX >= 0x030F0000
         PyUnstable_SetImmortal(table[i]);
@@ -9549,33 +11567,33 @@ static int __Pyx_CreateCodeObjects(__pyx_mstatetype *__pyx_mstate) {
   PyObject* tuple_dedup_map = PyDict_New();
   if (unlikely(!tuple_dedup_map)) return -1;
   {
-    const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 189};
+    const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 230};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_allowed_images, __pyx_mstate->__pyx_n_u_img};
     __pyx_mstate_global->__pyx_codeobj_tab[0] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_win_console_pyx, __pyx_mstate->__pyx_n_u_normalize_allowed_images, __pyx_mstate->__pyx_kp_b_iso88591_c_q_1Be9AS_fBfCt7_QTTWWXX_bbc, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[0])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 5, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 195};
+    const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 5, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 236};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_pid, __pyx_mstate->__pyx_n_u_h, __pyx_mstate->__pyx_n_u_buf, __pyx_mstate->__pyx_n_u_buf_size, __pyx_mstate->__pyx_n_u_path_str};
     __pyx_mstate_global->__pyx_codeobj_tab[1] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_win_console_pyx, __pyx_mstate->__pyx_n_u_query_image_basename_py, __pyx_mstate->__pyx_kp_b_iso88591_Kq_C3gQ_r_E_Bc_q_4_S_Qa_1_1_r_i, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[1])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {3, 0, 0, 3, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 215};
+    const __Pyx_PyCode_New_function_description descr = {3, 0, 0, 3, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 256};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_lock_path, __pyx_mstate->__pyx_n_u_allowed_images, __pyx_mstate->__pyx_n_u_same_session_only};
     __pyx_mstate_global->__pyx_codeobj_tab[2] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_win_console_pyx, __pyx_mstate->__pyx_n_u_find_process_by_lock_path, __pyx_mstate->__pyx_kp_b_iso88591_t1_q_1A_7_t3a_Cq_q_1_aq_3a_k_7, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[2])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 340};
+    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 381};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_lock_path, __pyx_mstate->__pyx_n_u_allowed_images};
     __pyx_mstate_global->__pyx_codeobj_tab[3] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_win_console_pyx, __pyx_mstate->__pyx_n_u_find_pid_by_lock_path, __pyx_mstate->__pyx_kp_b_iso88591_J_C1_y_1_q_81A, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[3])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {6, 0, 0, 6, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 369};
-    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_target_pid, __pyx_mstate->__pyx_n_u_expected_start_time, __pyx_mstate->__pyx_n_u_text, __pyx_mstate->__pyx_n_u_send_enter, __pyx_mstate->__pyx_n_u_submit_delay_sec, __pyx_mstate->__pyx_n_u_allowed_images};
+    const __Pyx_PyCode_New_function_description descr = {7, 0, 0, 7, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 578};
+    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_target_pid, __pyx_mstate->__pyx_n_u_expected_start_time, __pyx_mstate->__pyx_n_u_text, __pyx_mstate->__pyx_n_u_send_enter, __pyx_mstate->__pyx_n_u_submit_delay_sec, __pyx_mstate->__pyx_n_u_allowed_images, __pyx_mstate->__pyx_n_u_respect_user_typing};
     __pyx_mstate_global->__pyx_codeobj_tab[4] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_win_console_pyx, __pyx_mstate->__pyx_n_u_inject_console_input_verified, __pyx_mstate->__pyx_kp_b_iso88591_Ja_1_Ql_c_4z_q_Q_1_s_4A_1A_7_t3, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[4])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {6, 0, 0, 6, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 523};
-    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_target_pid, __pyx_mstate->__pyx_n_u_text, __pyx_mstate->__pyx_n_u_send_enter, __pyx_mstate->__pyx_n_u_submit_delay_sec, __pyx_mstate->__pyx_n_u_expected_start_time, __pyx_mstate->__pyx_n_u_allowed_images};
+    const __Pyx_PyCode_New_function_description descr = {7, 0, 0, 7, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 740};
+    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_target_pid, __pyx_mstate->__pyx_n_u_text, __pyx_mstate->__pyx_n_u_send_enter, __pyx_mstate->__pyx_n_u_submit_delay_sec, __pyx_mstate->__pyx_n_u_expected_start_time, __pyx_mstate->__pyx_n_u_allowed_images, __pyx_mstate->__pyx_n_u_respect_user_typing};
     __pyx_mstate_global->__pyx_codeobj_tab[5] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_win_console_pyx, __pyx_mstate->__pyx_n_u_inject_console_input, __pyx_mstate->__pyx_kp_b_iso88591_q_Cq_4z_q_Q_1_s_q_4_A_4q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[5])) goto bad;
   }
   Py_DECREF(tuple_dedup_map);
@@ -15076,6 +17094,85 @@ static CYTHON_INLINE PyObject* __Pyx_PyLong_From_long(long value) {
     }
 }
 
+/* CIntToPy */
+static CYTHON_INLINE PyObject* __Pyx_PyLong_From_DWORD(DWORD value) {
+#ifdef __Pyx_HAS_GCC_DIAGNOSTIC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+#endif
+    const DWORD neg_one = (DWORD) -1, const_zero = (DWORD) 0;
+#ifdef __Pyx_HAS_GCC_DIAGNOSTIC
+#pragma GCC diagnostic pop
+#endif
+    const int is_unsigned = neg_one > const_zero;
+    if (is_unsigned) {
+        if (sizeof(DWORD) < sizeof(long)) {
+            return PyLong_FromLong((long) value);
+        } else if (sizeof(DWORD) <= sizeof(unsigned long)) {
+            return PyLong_FromUnsignedLong((unsigned long) value);
+#if !CYTHON_COMPILING_IN_PYPY
+        } else if (sizeof(DWORD) <= sizeof(unsigned PY_LONG_LONG)) {
+            return PyLong_FromUnsignedLongLong((unsigned PY_LONG_LONG) value);
+#endif
+        }
+    } else {
+        if (sizeof(DWORD) <= sizeof(long)) {
+            return PyLong_FromLong((long) value);
+        } else if (sizeof(DWORD) <= sizeof(PY_LONG_LONG)) {
+            return PyLong_FromLongLong((PY_LONG_LONG) value);
+        }
+    }
+    {
+        unsigned char *bytes = (unsigned char *)&value;
+#if !CYTHON_COMPILING_IN_LIMITED_API && PY_VERSION_HEX >= 0x030d00A4
+        if (is_unsigned) {
+            return PyLong_FromUnsignedNativeBytes(bytes, sizeof(value), -1);
+        } else {
+            return PyLong_FromNativeBytes(bytes, sizeof(value), -1);
+        }
+#elif !CYTHON_COMPILING_IN_LIMITED_API && PY_VERSION_HEX < 0x030d0000
+        int one = 1; int little = (int)*(unsigned char *)&one;
+        return _PyLong_FromByteArray(bytes, sizeof(DWORD),
+                                     little, !is_unsigned);
+#else
+        int one = 1; int little = (int)*(unsigned char *)&one;
+        PyObject *result = NULL, *kwds = NULL;
+        PyObject *py_bytes = NULL, *order_str = NULL, *from_bytes_str = NULL;;
+        py_bytes = PyBytes_FromStringAndSize((char*)bytes, sizeof(DWORD));
+        if (!py_bytes) goto limited_bad;
+        from_bytes_str = PyUnicode_FromStringAndSize("from_bytes", 10);
+        if (!from_bytes_str) goto limited_bad;
+        order_str = PyUnicode_FromString(little ? "little" : "big");
+        if (!order_str) goto limited_bad;
+        {
+            PyObject *args[] = { (PyObject*)&PyLong_Type, py_bytes, order_str, Py_True };
+            if (!is_unsigned) {
+                PyObject *signed_str = PyUnicode_FromStringAndSize("signed", 6);
+                if (!signed_str) goto limited_bad;
+#if CYTHON_VECTORCALL
+                kwds = PyTuple_Pack(1, signed_str);
+#else
+                {
+                    PyObject *keys[] = {signed_str};
+                    PyObject *values[] = {Py_True};
+                    kwds = __Pyx_MakeKwargDict(keys, values, 1);
+                }
+#endif
+                Py_DECREF(signed_str);
+                if (unlikely(!kwds)) goto limited_bad;
+            }
+            result = __Pyx_Object_VectorcallMethodKwds(from_bytes_str, args, 3 | __Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET, kwds);
+        }
+        limited_bad:
+        Py_XDECREF(kwds);
+        Py_XDECREF(order_str);
+        Py_XDECREF(py_bytes);
+        Py_XDECREF(from_bytes_str);
+        return result;
+#endif
+    }
+}
+
 /* CIntFromPy */
 static DWORD __Pyx_LargePyLong___Pyx_PyLong_As_DWORD(PyObject *x);
 static DWORD __Pyx_raise_neg_overflow___Pyx_PyLong_As_DWORD(void) {
@@ -15374,6 +17471,85 @@ static CYTHON_INLINE DWORD __Pyx_PyLong_As_DWORD(PyObject *x) {
         return __Pyx_PyLong___Pyx_PyLong_As_DWORD(x);
     } else {
         return __Pyx_NonPyLong___Pyx_PyLong_As_DWORD(x);
+    }
+}
+
+/* CIntToPy */
+static CYTHON_INLINE PyObject* __Pyx_PyLong_From_BOOL(BOOL value) {
+#ifdef __Pyx_HAS_GCC_DIAGNOSTIC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+#endif
+    const BOOL neg_one = (BOOL) -1, const_zero = (BOOL) 0;
+#ifdef __Pyx_HAS_GCC_DIAGNOSTIC
+#pragma GCC diagnostic pop
+#endif
+    const int is_unsigned = neg_one > const_zero;
+    if (is_unsigned) {
+        if (sizeof(BOOL) < sizeof(long)) {
+            return PyLong_FromLong((long) value);
+        } else if (sizeof(BOOL) <= sizeof(unsigned long)) {
+            return PyLong_FromUnsignedLong((unsigned long) value);
+#if !CYTHON_COMPILING_IN_PYPY
+        } else if (sizeof(BOOL) <= sizeof(unsigned PY_LONG_LONG)) {
+            return PyLong_FromUnsignedLongLong((unsigned PY_LONG_LONG) value);
+#endif
+        }
+    } else {
+        if (sizeof(BOOL) <= sizeof(long)) {
+            return PyLong_FromLong((long) value);
+        } else if (sizeof(BOOL) <= sizeof(PY_LONG_LONG)) {
+            return PyLong_FromLongLong((PY_LONG_LONG) value);
+        }
+    }
+    {
+        unsigned char *bytes = (unsigned char *)&value;
+#if !CYTHON_COMPILING_IN_LIMITED_API && PY_VERSION_HEX >= 0x030d00A4
+        if (is_unsigned) {
+            return PyLong_FromUnsignedNativeBytes(bytes, sizeof(value), -1);
+        } else {
+            return PyLong_FromNativeBytes(bytes, sizeof(value), -1);
+        }
+#elif !CYTHON_COMPILING_IN_LIMITED_API && PY_VERSION_HEX < 0x030d0000
+        int one = 1; int little = (int)*(unsigned char *)&one;
+        return _PyLong_FromByteArray(bytes, sizeof(BOOL),
+                                     little, !is_unsigned);
+#else
+        int one = 1; int little = (int)*(unsigned char *)&one;
+        PyObject *result = NULL, *kwds = NULL;
+        PyObject *py_bytes = NULL, *order_str = NULL, *from_bytes_str = NULL;;
+        py_bytes = PyBytes_FromStringAndSize((char*)bytes, sizeof(BOOL));
+        if (!py_bytes) goto limited_bad;
+        from_bytes_str = PyUnicode_FromStringAndSize("from_bytes", 10);
+        if (!from_bytes_str) goto limited_bad;
+        order_str = PyUnicode_FromString(little ? "little" : "big");
+        if (!order_str) goto limited_bad;
+        {
+            PyObject *args[] = { (PyObject*)&PyLong_Type, py_bytes, order_str, Py_True };
+            if (!is_unsigned) {
+                PyObject *signed_str = PyUnicode_FromStringAndSize("signed", 6);
+                if (!signed_str) goto limited_bad;
+#if CYTHON_VECTORCALL
+                kwds = PyTuple_Pack(1, signed_str);
+#else
+                {
+                    PyObject *keys[] = {signed_str};
+                    PyObject *values[] = {Py_True};
+                    kwds = __Pyx_MakeKwargDict(keys, values, 1);
+                }
+#endif
+                Py_DECREF(signed_str);
+                if (unlikely(!kwds)) goto limited_bad;
+            }
+            result = __Pyx_Object_VectorcallMethodKwds(from_bytes_str, args, 3 | __Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET, kwds);
+        }
+        limited_bad:
+        Py_XDECREF(kwds);
+        Py_XDECREF(order_str);
+        Py_XDECREF(py_bytes);
+        Py_XDECREF(from_bytes_str);
+        return result;
+#endif
     }
 }
 

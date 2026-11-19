@@ -12,6 +12,7 @@ agentknock.adapters.agy — Antigravity CLI (agy.exe) Delivery Adapter & Livenes
 """
 from __future__ import annotations
 
+import inspect
 import os
 from pathlib import Path
 import re
@@ -184,6 +185,7 @@ class AgyDeliveryAdapter(DeliveryAdapter):
         send_enter: bool = True,
         submit_delay_sec: float = 0.08,
         allowed_images: Optional[Sequence[str]] = DEFAULT_ALLOWED_IMAGES,
+        respect_user_typing: bool = True,
     ) -> None:
         self.presence_dir = presence_dir or DEFAULT_PRESENCE_DIR
         self.wake_locale = wake_locale
@@ -193,6 +195,7 @@ class AgyDeliveryAdapter(DeliveryAdapter):
         self.allowed_images: Optional[tuple[str, ...]] = (
             tuple(allowed_images) if allowed_images is not None else None
         )
+        self.respect_user_typing: bool = bool(respect_user_typing)
         self.last_wake_detail: Optional[dict[str, Any]] = None
 
     @property
@@ -240,6 +243,17 @@ class AgyDeliveryAdapter(DeliveryAdapter):
         identity = self._find_process_identity(conversation_id)
         return identity[0] if identity else None
 
+    @staticmethod
+    def _supports_kwarg(fn: Any, kw: str) -> bool:
+        try:
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError):
+            return True
+        params = sig.parameters
+        return kw in params or any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+        )
+
     def _inject(
         self,
         pid: int,
@@ -248,6 +262,7 @@ class AgyDeliveryAdapter(DeliveryAdapter):
         expected_start_time: Optional[int] = None,
         send_enter: Optional[bool] = None,
         submit_delay_sec: Optional[float] = None,
+        respect_user_typing: Optional[bool] = None,
     ) -> bool:
         """
         HANDLE ピン留め + ProcessStartTime 検証付き CONIN$ 注入 (L0).
@@ -283,18 +298,34 @@ class AgyDeliveryAdapter(DeliveryAdapter):
         eff_delay = (
             self.submit_delay_sec if submit_delay_sec is None else submit_delay_sec
         )
+        eff_respect = (
+            self.respect_user_typing
+            if respect_user_typing is None
+            else bool(respect_user_typing)
+        )
         backend_name = getattr(_win_console, "_BACKEND", "unknown")
 
         inject_verified = getattr(_win_console, "inject_console_input_verified", None)
         if callable(inject_verified):
-            ok, reason, win32_err = inject_verified(
-                pid,
-                expected_start_time,
-                text,
-                eff_enter,
-                eff_delay,
-                allowed_images=self.allowed_images,
-            )
+            if self._supports_kwarg(inject_verified, "respect_user_typing"):
+                ok, reason, win32_err = inject_verified(
+                    pid,
+                    expected_start_time,
+                    text,
+                    eff_enter,
+                    eff_delay,
+                    allowed_images=self.allowed_images,
+                    respect_user_typing=eff_respect,
+                )
+            else:
+                ok, reason, win32_err = inject_verified(
+                    pid,
+                    expected_start_time,
+                    text,
+                    eff_enter,
+                    eff_delay,
+                    allowed_images=self.allowed_images,
+                )
             self.last_wake_detail = {
                 "reason": str(reason),
                 "win32_error": int(win32_err),
@@ -304,16 +335,30 @@ class AgyDeliveryAdapter(DeliveryAdapter):
             }
             return bool(ok)
 
-        ok = bool(
-            _win_console.inject_console_input(
-                pid,
-                text,
-                eff_enter,
-                eff_delay,
-                expected_start_time=expected_start_time,
-                allowed_images=self.allowed_images,
+        inject_legacy = _win_console.inject_console_input
+        if self._supports_kwarg(inject_legacy, "respect_user_typing"):
+            ok = bool(
+                inject_legacy(
+                    pid,
+                    text,
+                    eff_enter,
+                    eff_delay,
+                    expected_start_time=expected_start_time,
+                    allowed_images=self.allowed_images,
+                    respect_user_typing=eff_respect,
+                )
             )
-        )
+        else:
+            ok = bool(
+                inject_legacy(
+                    pid,
+                    text,
+                    eff_enter,
+                    eff_delay,
+                    expected_start_time=expected_start_time,
+                    allowed_images=self.allowed_images,
+                )
+            )
         self.last_wake_detail = {
             "reason": "ok" if ok else "inject_failed",
             "win32_error": 0,
