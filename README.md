@@ -167,7 +167,7 @@ python -m agentknock watch --target my-agent --adapter callback --notifier polli
 When used as an **Agent Skill** (e.g. via `SKILL.md` in Antigravity or Claude Code), autonomous agents interact through three coordinated steps:
 
 1. **Discovery & Dispatch**: The sender agent inspects peers with `agentknock.list_recipients()` and posts requests using `agentknock.send(recipient=..., content=..., sender=...)`.
-2. **Focus-Free Wake**: The background `WatchDaemon` detects the incoming marker in `undelivered/` and invokes `adapter.wake(target_id)` (e.g. injecting a benign wake nudge into `CONIN$` without stealing desktop focus).
+2. **Focus-Free, Typing-Safe Wake (User-Typing Collision Guard)**: The background `WatchDaemon` detects the incoming marker in `undelivered/` and invokes `adapter.wake(target_id)` (e.g. injecting a benign wake nudge into `CONIN$` without stealing desktop focus). In `AgyDeliveryAdapter` (`v0.3.4`, `respect_user_typing=True` by default), if the human owner is typing in the console, the wake nudge automatically waits or is skipped (`deferred_user_typing`) so in-progress prompts are never corrupted.
 3. **Autonomous Ingestion ([`docs/AGENTS.md`](./docs/AGENTS.md))**: The woken agent acknowledges the wake doorbell, actively loads the instruction from the signed `<SYSTEM_MESSAGE>` payload, deletes the marker from `undelivered/`, and records the message ID in `read.json` (R-M1).
 
 ---
@@ -639,10 +639,11 @@ command, fail-closed to `en`.
 
 ## Operations guide
 
-The focus-not-stolen property is a feature *and* a risk: injection into a
-non-attributable wake channel is invisible to the human by design. These three
-controls restore human oversight and are **operational requirements**, not
-optional extras.
+Focusing away from the desktop window makes `CONIN$` wakes unobtrusive — which
+creates both an oversight requirement and a keystroke-collision risk if the
+human owner is typing at the exact moment a wake fires. These three human-oversight
+controls are **operational requirements**, not optional extras, paired with the
+default collision guard on `AgyDeliveryAdapter`:
 
 ### 1. Audit log (append-only)
 
@@ -672,6 +673,26 @@ with existing loop guards (`sender == "user"` is skipped to prevent infinite
 loops, plus rate-limiting / loop detection) and `rewake_cooldown_sec`, this
 bounds any wake storm. Failed messages exceeding retry limits are quarantined
 to `dead_letter/<id>.json` rather than retried indefinitely.
+
+### 4. User-Typing Collision Guard (`AgyDeliveryAdapter`)
+
+Since v0.3.4, `AgyDeliveryAdapter` and `inject_console_input_verified()` enable
+the **User-Typing Collision Guard** (`respect_user_typing=True`) by default so
+focus-free wakes never collide with or submit a half-typed human prompt.
+Immediately before `WriteConsoleInputW`, the guard checks:
+
+1. Pending keystrokes on `CONIN$` (`KEY_EVENT` records with `bKeyDown=True`), and
+2. Visible text on the active `CONOUT$` input line (columns `0..X-1`, ignoring
+   a bare leading `> ` idle prompt — covering both ASCII and non-ASCII text such
+   as full-width / Japanese input, even when the human pauses mid-sentence).
+
+If typing is detected, the guard retries up to 2 times (0.4 s apart) and, if
+still active, skips the `CONIN$` injection cleanly with
+`(False, "deferred_user_typing", 0)` (failing closed with
+`(False, "user_typing_check_failed", win32_err)` on console inspection API
+errors, while injecting normally on a bare idle `> ` prompt). Because the signed
+JSON message and its `undelivered/` marker are already safely queued in the
+mailbox, deferred messages still reach the target when the active turn ends.
 
 ---
 

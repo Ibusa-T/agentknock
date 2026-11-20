@@ -44,6 +44,17 @@ Yet anything that appears on the console on a wake turn is still untrusted,
 because the console channel carries no provenance even when the knock is
 local. Trust comes from the signed JSON, not from the knock.
 
+Note that as of v0.3.4, `AgyDeliveryAdapter` also enables the **User-Typing
+Collision Guard** (`respect_user_typing=True`) by default: while the human
+owner is interactively typing at your console, the `CONIN$` wake nudge is
+intentionally deferred or omitted (`deferred_user_typing`) so in-progress
+keystrokes are never interrupted. Even when the `CONIN$` knock is skipped,
+the signed JSON message and its `undelivered/<Message-ID>` marker are already
+waiting in your mailbox and will be delivered to your context through the
+`<SYSTEM_MESSAGE>` channel once the active interactive turn completes;
+handle those messages under the exact same rules below (sender verification
+and R-M1 marker consumption).
+
 ### Marker ownership (R-M1 — important behavior change in v0.3)
 
 In v0.3 the receiver (you) owns the right — and the obligation — to delete

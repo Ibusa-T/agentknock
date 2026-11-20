@@ -104,15 +104,21 @@ sequenceDiagram
             Watcher->>Audit: audit RETRY (wake_reason, win32_error)
         else (PID, start_time_u64) 取得
             Adapter->>Adapter: resolve_wake_prompt(wake_locale, output_locale) → ローカル定数カタログ由来
-            Adapter->>Win: inject_console_input_verified(PID, start_time_u64, wake_text, Enter)
-            Note over Win: OpenProcess ピン留め + WaitForSingleObject(0) + GetProcessTimes<br/>+ QueryFullProcessImageNameW("agy.exe") + 同一 TS セッション検証
-            Win->>Target: AttachConsole + WriteConsoleInputW → CONIN$ 直接書込 (フォーカス非奪取)
-            Win-->>Adapter: (ok, wake_reason, win32_error) → adapter.last_wake_detail 更新
-            Adapter-->>Watcher: True (失敗時は False → 指数バックオフ RETRY & audit 記録)
-            Watcher->>Watcher: ack_grace 1.5s 待機 → marker 残存なら atomic unlink (v0.3 R-M1 では受信側消費)
-            Watcher->>Audit: audit DELIVERED
-            Target->>Target: 起床 → AGENTS.md ルールに従い <SYSTEM_MESSAGE>.json を読込
-            Target->>FS: undelivered/<Message-ID> を消費 & read.json 追記
+            Adapter->>Win: inject_console_input_verified(PID, start_time_u64, wake_text, Enter, respect_user_typing=True)
+            Note over Win: OpenProcess ピン留め + WaitForSingleObject(0) + GetProcessTimes<br/>+ QueryFullProcessImageNameW("agy.exe") + User-Typing Collision Guard<br/>(CONIN$ 未処理 KEY_EVENT / CONOUT$ 行入力文字を最大 2 回・0.4s 間隔で検査)
+            alt ユーザー入力中を検知 (または検査 API 失敗)
+                Win-->>Adapter: (False, "deferred_user_typing" | "user_typing_check_failed", err)
+                Note over Win,Target: WriteConsoleInputW を呼ばず安全中止。署名付きメッセージは投函済みのため<br/>進行中の人間ターン終了時に <SYSTEM_MESSAGE> 経由で受信側へ届く
+                Adapter-->>Watcher: False (last_wake_detail["reason"] 記録 → 指数バックオフ RETRY & audit 記録)
+            else 真アイドル状態 (X==0 / 空白のみ / agy の "> " プロンプトのみ)
+                Win->>Target: AttachConsole + WriteConsoleInputW → CONIN$ 直接書込 (フォーカス非奪取)
+                Win-->>Adapter: (ok, wake_reason, win32_error) → adapter.last_wake_detail 更新
+                Adapter-->>Watcher: True (失敗時は False → 指数バックオフ RETRY & audit 記録)
+                Watcher->>Watcher: ack_grace 1.5s 待機 → marker 残存なら atomic unlink (v0.3 R-M1 では受信側消費)
+                Watcher->>Audit: audit DELIVERED
+                Target->>Target: 起床 → AGENTS.md ルールに従い <SYSTEM_MESSAGE>.json を読込
+                Target->>FS: undelivered/<Message-ID> を消費 & read.json 追記
+            end
         end
     end
     opt max_attempts 枯渇
@@ -186,9 +192,9 @@ sequenceDiagram
 
 | # | クラス/メソッド | 引数 | 戻り値 | 責務 | 層 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 27 | `_AgyAdapter.__init__` / `AgyDeliveryAdapter.__init__` | `*, base_dir, brain_dir, presence_dir, registry_dir, ...` (`AgyDeliveryAdapter` は `allowed_images=("agy.exe",)` 等の検証設定も保持) | - | テスト用ディレクトリ差し替え seam と `last_wake_detail` 初期化 | L1 |
+| 27 | `_AgyAdapter.__init__` / `AgyDeliveryAdapter.__init__` | `*, base_dir, brain_dir, presence_dir, registry_dir, ...` (`AgyDeliveryAdapter` は `allowed_images=("agy.exe",)`, `respect_user_typing=True` 等の検証設定も保持) | - | テスト用ディレクトリ差し替え seam と `last_wake_detail` 初期化 | L1 |
 | 28 | `_AgyAdapter._find_process_identity` / `_find_pid` | `conversation_id: str` | `Optional[tuple[int, int]]` / `Optional[int]` | `_find_process_identity` は `find_process_by_lock_path` により `(pid, start_time_u64)` を返却。`_find_pid` は後方互換・monkeypatch seam | L1 → L0 |
-| 29 | `_AgyAdapter._inject` / `AgyDeliveryAdapter._inject` | `pid: int, text: str, *, expected_start_time=None, send_enter=True, submit_delay_sec=0.08` | `bool` | monkeypatch seam — `expected_start_time` (`> 0`) 必須の fail-closed (`"invalid_pid_or_start_time"`)。`inject_console_input_verified` を呼び結果を `last_wake_detail` に記録 | L1 → L0 |
+| 29 | `_AgyAdapter._inject` / `AgyDeliveryAdapter._inject` | `pid: int, text: str, *, expected_start_time=None, send_enter=True, submit_delay_sec=0.08, respect_user_typing=None` | `bool` | monkeypatch seam — `expected_start_time` (`> 0`) 必須の fail-closed (`"invalid_pid_or_start_time"`)。`inject_console_input_verified(..., respect_user_typing=...)` を呼び結果を `last_wake_detail` に記録 | L1 → L0 |
 | 30 | `_AgyAdapter.wake` / `AgyDeliveryAdapter.wake` | `conversation_id, *, wake_locale, output_locale, send_enter=True, submit_delay_sec=0.08` | `bool` | `_find_process_identity` → `_inject(pid, resolve_wake_prompt(...), expected_start_time=start_time)`。見つからない・曖昧な場合は `"lock_holder_not_found_or_ambiguous"` を `last_wake_detail` に記録し fail-closed。**R2 不変条件**: `text` は必ずローカル定数カタログ由来 (msg_data 非依存) | L1 |
 | 31 | `_find_agy_process_by_conversation_id` / `_find_agy_pid_by_conversation_id` | `conversation_id, *, presence_dir=None, allowed_images=DEFAULT_ALLOWED_IMAGES` | `Optional[tuple[int, int]]` / `Optional[int]` | `_win_console.find_process_by_lock_path` / `find_pid_by_lock_path` の Python 側ラッパ | L1 |
 | 32 | `_inject_console_input` | `target_pid, text=None, send_enter=True, submit_delay_sec=0.08, *, expected_start_time=None, allowed_images=DEFAULT_ALLOWED_IMAGES, wake_locale=None, output_locale=None` | `bool` | `_win_console.inject_console_input` の Python 側ラッパ (`expected_start_time` 未指定・`<= 0` は fail-closed)。`text=None` 時は `resolve_wake_prompt` でローカル解決 | L1 |
@@ -196,14 +202,14 @@ sequenceDiagram
 
 ### 2.6 L0 — ネイティブ Cython 拡張 (`_win_console.pyx`) / ctypes フォールバック (`agentknock/adapters/_win_console_ctypes.py`)
 
-Cython 拡張 `_win_console.pyx` (GIL 完全解放 `with nogil:`、`<windows.h>` / `<restartmanager.h>` 直叩き) を優先ロードし、未コンパイル環境では純 Python の `agentknock/adapters/_win_console_ctypes.py` に自動フォールバックする。v0.3.1 では両バックエンドとも TOCTOU (PID 再利用) 対策の 4 点検証・HANDLE ピニング・fail-closed 設計を実装する。
+Cython 拡張 `_win_console.pyx` (GIL 完全解放 `with nogil:`、`<windows.h>` / `<restartmanager.h>` 直叩き) を優先ロードし、未コンパイル環境では純 Python の `agentknock/adapters/_win_console_ctypes.py` に自動フォールバックする。v0.3.1 の TOCTOU (PID 再利用) 対策（4 点検証・HANDLE ピニング・fail-closed 設計）に加え、v0.3.4 では両バックエンドとも User-Typing Collision Guard (`respect_user_typing=True`) を実装する。
 
 | # | 関数名 | 引数 | 戻り値 | 責務 |
 | :--- | :--- | :--- | :--- | :--- |
 | 34 | `_win_console.find_process_by_lock_path` | `lock_path: str, allowed_images=None, *, same_session_only=True` | `Optional[tuple[int, int]]` | Restart Manager API (`rstrtmgr.dll`) + TS セッション一致検証 + `OpenProcess` + `WaitForSingleObject(0)` + `GetProcessTimes` + `QueryFullProcessImageNameW` (既定 `agy.exe`) で検証し、ユニーク保持者が 1 件のみの場合 `(pid, start_time_u64)` を返す (0 件または複数候補時は `None` / fail-closed) |
-| 35 | `_win_console.inject_console_input_verified` | `target_pid: int, expected_start_time: int, text="進めて", send_enter=True, submit_delay_sec=0.08, *, allowed_images=None` | `tuple[bool, str, int]` | カーネル `HANDLE` を最終 `CloseHandle` まで保持 (HANDLE pinning) し、生存確認・`GetProcessTimes` 64bit FILETIME 完全一致・イメージ名検証・`AttachConsole` / `CONIN$` 取得・注入直前の再生存確認後に `WriteConsoleInputW` で入力注入し `(ok, reason, win32_err)` を返す |
+| 35 | `_win_console.inject_console_input_verified` | `target_pid: int, expected_start_time: int, text="進めて", send_enter=True, submit_delay_sec=0.08, *, allowed_images=None, respect_user_typing=True` | `tuple[bool, str, int]` | カーネル `HANDLE` を最終 `CloseHandle` まで保持 (HANDLE pinning) し、生存確認・`GetProcessTimes` 64bit FILETIME 完全一致・イメージ名検証・`AttachConsole` / `CONIN$` 取得・注入直前の再生存確認に加え、`respect_user_typing=True` 時は User-Typing Collision Guard（`CONIN$` 未処理 `KEY_EVENT` 検査および `CONOUT$` 現在行 `0..X-1` の行頭 `> ` 除外後における ASCII/全角・日本語など可視文字 `ord(ch) > 0x20 and ord(ch) != 0x7F` 検査、最大 2 回・0.4 s 間隔リトライ）を実施する。入力中なら `WriteConsoleInputW` を抑止して `(False, "deferred_user_typing", 0)`、検査 API エラー時は fail-closed で `(False, "user_typing_check_failed", win32_err)`、真アイドル時は注入して `(ok, reason, win32_err)` を返す |
 | 36 | `_win_console.find_pid_by_lock_path` | `lock_path: str, allowed_images=None` | `Optional[int]` | `find_process_by_lock_path` の互換ラッパ (PID のみ返却) |
-| 37 | `_win_console.inject_console_input` | `target_pid: int, text="進めて", send_enter=True, submit_delay_sec=0.08, *, expected_start_time=None, allowed_images=None` | `bool` | 互換 API (v0.3.1 以降は `expected_start_time` 必須。未指定または `<= 0` の場合は即時 `False` の fail-closed) |
+| 37 | `_win_console.inject_console_input` | `target_pid: int, text="進めて", send_enter=True, submit_delay_sec=0.08, *, expected_start_time=None, allowed_images=None, respect_user_typing=True` | `bool` | 互換 API (v0.3.1 以降は `expected_start_time` 必須。未指定または `<= 0` の場合は即時 `False` の fail-closed。`respect_user_typing=True` を `inject_console_input_verified` へ引き渡す) |
 
 ### 2.7 MCP stdio サーバ (`agentknock/mcp_server.py`)
 
@@ -243,6 +249,7 @@ D0 の正本契約。D1-D5 はこれを import してのみ型・名前を参照
 - [`tests/test_d4_r2_r1_invariants.py`](../tests/test_d4_r2_r1_invariants.py) — R2 構造/動的/名前空間 + R1 台帳絞り込み + L1 seam 粒度
 - [`tests/test_t3_security.py`](../tests/test_t3_security.py) — T3 セキュリティ (R2 境界維持 + sender/title 硬化)
 - [`tests/test_v031_toctou_security.py`](../tests/test_v031_toctou_security.py) — v0.3.1 セキュリティ強化 (HANDLE ピニング・`ProcessStartTime` 厳密一致・`RmGetList` 許可イメージ/TS セッション/曖昧時 fail-closed・`AgyLockLivenessProbe` fail-closed・`audit.jsonl` 構造化理由記録・R2 禁止シンボル網羅・実サブプロセス時刻一致検証)
+- [`tests/test_v034_user_typing_guard_and_runner.py`](../tests/test_v034_user_typing_guard_and_runner.py) — v0.3.4 User-Typing Collision Guard（`CONIN$` 未処理キー検知・`CONOUT$` 入力行 ASCII/非 ASCII 保護・静的プロンプト許容・API 失敗時 fail-closed・`respect_user_typing=False` 無効化・`AgyDeliveryAdapter.last_wake_detail` 伝搬）および固定 CLI ランナー `run_op.py`（`status` / `send` / `ack` / ロケール既定値・`main()` 契約）
 
 ### 3.2 【カテゴリ 1】公開 API 面の構造的 R2 保証 (`tests/test_d4_r2_r1_invariants.py`)
 
@@ -294,6 +301,17 @@ v0.2 では「送信→自動起床」の一発テストは **(a) 送信側 `sen
 | 受信側のみ: `on_undelivered_file_created` で自動起床 | 既存の `undelivered/<Message-ID>` に対し `uv run python console_injector.py --undelivered-file "<path>"` 実行 | 別窓がフォーカスを奪わずに起床、`undelivered` 消費、`read.json` 更新、`<SYSTEM_MESSAGE>` が transcript に残る |
 | 送受統合: 実機の `ResidentWatcher` を常駐させて送信 | 受信側で `ResidentWatcher.start()` を起動 → 送信側から `agentknock.send(...)` | 数秒以内に marker 消費・`audit.jsonl` に DELIVERED 記録 |
 | dead-letter 隔離 (指数バックオフ枯渇) | PID が見つからない状態で `undelivered/<Message-ID>` を投下 | `max_attempts=5` 後に tier=local の `dead_letter/<Message-ID>.json` に `os.replace` 隔離 + audit に DEAD_LETTER 記録 |
+
+### 3.8 【カテゴリ 7】User-Typing Collision Guard & CLI ランナー (`tests/test_v034_user_typing_guard_and_runner.py`)
+
+| テスト群 / 観点 | 観点 | 期待 |
+| :--- | :--- | :--- |
+| `CONIN$` 未処理キー検知 (`PeekConsoleInputW`) | `KEY_EVENT` (`bKeyDown=True`) がキューにある状態での注入要求 | 最大 2 回（0.4 s 間隔）再確認後に `WriteConsoleInputW` を呼ばず `(False, "deferred_user_typing", 0)` を返却 |
+| `CONOUT$` 入力行可視文字検知 (`ReadConsoleOutputCharacterW`) | `0..X-1` 列に ASCII 可視文字（`0x21..0x7E`）または日本語・全角等の非 ASCII 文字（`>= 0x80`）が存在（カーソル静止中の停止を含む） | 入力中と判定し `(False, "deferred_user_typing", 0)` で抑止（文字入力・Enter を送信しない） |
+| 静的プロンプト / 真アイドル許容 | 先頭列 `>`＋スペースのみの空プロンプト（`> `）、`X == 0`、空白／制御文字のみ | 入力中と誤判定せず通常どおり `WriteConsoleInputW` を実行し `(True, "ok", 0)` を返却 |
+| Fail-Closed / リトライ中終了 / オプトアウト | 検査 Win32 API 失敗・リトライ中のプロセス終了・`respect_user_typing=False` 指定 | API 失敗時は `(False, "user_typing_check_failed", win32_err)`、終了時は `"process_already_exited"`、`respect_user_typing=False` では検査 API 未呼出 |
+| アダプタ `last_wake_detail` 伝搬 | `AgyDeliveryAdapter(respect_user_typing=...)` 経由での `wake()` 実行 | `last_wake_detail["reason"]` に L0 理由コード（`"deferred_user_typing"` 等）を記録 |
+| CLI ランナー (`run_op.py`) | `status` / `send` / `ack` / `--wake-locale`・`--output-locale` / `main()` 単行 JSON 出力・終了コード | ロケール未指定時は `None` を渡してアダプタ既定 `"en"` を維持、CLI 引数で payload 値を上書き、未知 `action` は `{"ok": false, ...}` + 終了コード `1` |
 
 ---
 

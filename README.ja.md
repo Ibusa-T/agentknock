@@ -144,7 +144,7 @@ python -m agentknock watch --target my-agent --adapter callback --notifier polli
 本ツールを **Agent Skill**（Antigravity や Claude Code 向けの `SKILL.md` など）としてエージェントが利用する場合、3 つのステップで自律連携します:
 
 1. **発見と送信**: 送信側エージェントは `agentknock.list_recipients()` で到達可能な協調相手を確認し、`agentknock.send(recipient=..., content=..., sender=...)` で署名付きタスクを投函します。
-2. **フォーカス非強奪の起床**: 受信側マシンで動作する `WatchDaemon` が `undelivered/` へのマーカー着信を検知し、`adapter.wake(target_id)` により作業中の人間オーナーの前面ウィンドウを奪わずに `CONIN$` へ起床ノックを送ります。
+2. **フォーカス非強奪の起床（User-Typing Collision Guard）**: 受信側マシンで動作する `WatchDaemon` が `undelivered/` へのマーカー着信を検知し、`adapter.wake(target_id)` により作業中の人間オーナーの前面ウィンドウを奪わずに `CONIN$` へ起床ノックを送ります。また、`AgyDeliveryAdapter`（v0.3.4、既定で `respect_user_typing=True`）は人間のコンソールタイピング中を検知すると起床ナッジ注入を自動的に待機／スキップ（`deferred_user_typing`）し、入力途中のプロンプトを破壊しません。
 3. **エージェント規約に基づく自律処理 ([`docs/AGENTS.ja.md`](./docs/AGENTS.ja.md))**: 起床したエージェントは呼び鈴を認識し、能動的に `<SYSTEM_MESSAGE>` ペイロードから指示をロードします。処理完了後に `undelivered/` マーカーを削除して `read.json` に記録します（R-M1 マーカー所有権）。
 
 ---
@@ -497,7 +497,7 @@ v0.3 では i18n 起床ナッジカタログは**アダプタ内部**の関心�
 
 ## 運用ガイド
 
-フォーカスを奪わない特性は、機能であると同時にリスクです——帰属不能な起床チャネルへの注入は設計上、人間に不可視です。以下の 3 つの統制は人間の監督を取り戻すもので、**運用上の必須要件**であり任意オプションではありません。
+フォーカスを奪わない特性は、機能であると同時にリスクです——帰属不能な起床チャネルへの注入は設計上、人間に不可視です。また、人間オーナーがちょうど入力中のタイミングで注入が走ると入力内容と衝突するリスクもあります。以下の統制（1〜3 の必須監督要件）および衝突防止保護（4）により、人間の監督性と対話入力の安全性を取り戻します。
 
 ### 1. 監査ログ（追記専用）
 
@@ -515,6 +515,15 @@ v0.3 では i18n 起床ナッジカタログは**アダプタ内部**の関心�
 ### 3. キルスイッチ
 
 `unregister_self(alias)` が discovery レイヤのキルスイッチです——一度呼べばエントリは外れ、以降の discovery と送信先選択はどちらも即座に止まります。既存のループガード（無限ループ防止の `sender == "user"` スキップ ＋ レート制限 / ループ検出）と `rewake_cooldown_sec` を組み合わせ、起床ストームを抑え込みます。リトライ上限超過の失敗メッセージは `dead_letter/<id>.json` に隔離され、無限再試行はしません。
+
+### 4. User-Typing Collision Guard（入力衝突ガード、`AgyDeliveryAdapter`）
+
+フォーカスを奪わずに `CONIN$` へ注入する特性上、人間オーナーがプロンプトを手入力している最中に起床ナッジや Enter（`\r`）が割り込むと、入力途中の文面が破損・誤送信されるおそれがあります。v0.3.4 以降、`AgyDeliveryAdapter` および下位 L0 関数 `inject_console_input_verified()` は既定で **`respect_user_typing=True`** を有効にし、注入直前に以下を検査します:
+
+1. `CONIN$` 上に未処理キーイベント（`KEY_EVENT` かつ `bKeyDown=True`）が存在しないか
+2. `CONOUT$` の現在入力行（カーソル位置 `0..X-1`、行頭の静的プロンプト `> ` 自体は除外）に、ASCII または日本語・全角などの非 ASCII 可視文字（`ord(ch) > 0x20 and ord(ch) != 0x7F`）が入力中でないか（カーソル静止中の思考停止状態も含む）
+
+入力中を検知した場合は最大 2 回（0.4 秒間隔）待機し、なおタイピング中であれば `WriteConsoleInputW` を呼ばずに `CONIN$` 注入を自動スキップして `(False, "deferred_user_typing", 0)` を返します（検査 API 取得エラー時は `(False, "user_typing_check_failed", win32_err)` に fail-closed、`> ` プロンプトのみの真アイドル状態では従来どおり注入）。起床ナッジが見送られても、署名付きメッセージ本体と `undelivered/` マーカーはすでに mailbox へ投函済みのため、現在進行中の人間ターン完了時にハーネス経由で安全に配送されます。
 
 ---
 
