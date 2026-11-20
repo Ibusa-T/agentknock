@@ -1029,3 +1029,783 @@ def test_leading_prompt_exclusion_and_lockout_prevention(
     )
     assert (ok, reason, err) == (expected_ok, expected_reason, 0)
     assert fake.write_calls == (2 if expected_ok else 0)
+
+
+# ===========================================================================
+# § S — Phase 1-A / 1-C: fixed CLI runner `run_op.py` (status / send / ack)
+# ===========================================================================
+# Spec: agent_docs/think/agentknock_v04_sandbox_and_nudge_issues.md §3.1 + §3.3.
+# Target module: `run_op` (lives at `agentknock/run_op.py`, i.e. the
+# `_TOOLS_DIR` that `tests/conftest.py` already puts on sys.path).
+#
+# Tests use a lazy fixture so that a missing `run_op.py` does NOT break
+# collection of the existing 90 typing-guard tests — each run_op test fails
+# red individually (TDD-friendly) until coder-a lands the file.
+# ===========================================================================
+import importlib
+import json as _json
+import uuid as _uuid
+from pathlib import Path as _Path
+from typing import Any as _Any
+
+
+_RUN_OP_IMPORT_MSG = (
+    "Phase 1-A: `run_op.py` must exist at "
+    "`agent_docs/tools/agentknock/run_op.py` per spec "
+    "`agentknock_v04_sandbox_and_nudge_issues.md` §3.1 (3) and expose "
+    "`CLAUDE_IDS`, `check_target_status`, `run_status`, `run_send`, `run_ack`."
+)
+
+
+@pytest.fixture
+def run_op_module():
+    """
+    Lazily import the `run_op` module. If missing, fail THIS test red (not
+    skip, not collection-error) with a message that points coder-a at the
+    spec. This keeps TDD red→green signal clean while not blocking the 90
+    existing typing-guard tests.
+    """
+    try:
+        return importlib.import_module("run_op")
+    except ModuleNotFoundError as e:  # pragma: no cover - driven by file state
+        pytest.fail(f"{_RUN_OP_IMPORT_MSG} (ModuleNotFoundError: {e})")
+
+
+_SAMPLE_AGY_UUID = "0c2d2810-bafd-4e0c-8ed6-a3c6c06cf9c3"  # QA-style target
+_SAMPLE_6D_UUID = "36e46c8a-59ad-4e5b-9df3-9eec25ad352b"   # 6d (Claude session)
+_SAMPLE_D4_UUID = "44d8d80f-0394-4a07-ad6a-19acc09a3ec4"   # d4 (Claude session)
+
+
+@pytest.fixture
+def fake_home(monkeypatch, tmp_path):
+    """
+    Redirect `Path.home()` to a per-test tmp dir so `run_op`'s absolute
+    `Path.home() / '.gemini/antigravity-cli/...'` paths land in isolated
+    scratch without touching the real presence/brain dirs.
+    """
+    monkeypatch.setattr(_Path, "home", classmethod(lambda cls: tmp_path))  # type: ignore[arg-type]
+    (tmp_path / ".gemini" / "antigravity-cli" / "presence").mkdir(
+        parents=True, exist_ok=True
+    )
+    return tmp_path
+
+
+# --- § S.1 contract: public API surface the spec names ---------------------
+
+
+def test_run_op_exposes_required_public_surface(run_op_module):
+    """
+    Spec §3.1 (3) names CLAUDE_IDS, check_target_status, run_status, run_send,
+    run_ack. If any one is missing, run_op is not spec-compliant and all
+    downstream tests would short-circuit anyway — surface it directly.
+    """
+    required = ["CLAUDE_IDS", "check_target_status", "run_status", "run_send", "run_ack"]
+    missing = [name for name in required if not hasattr(run_op_module, name)]
+    assert not missing, (
+        f"run_op.py is missing spec-required symbols: {missing}. "
+        f"See spec §3.1 (3)."
+    )
+    # CLAUDE_IDS must at least include d4 (44d8d80f) and 6d (36e46c8a), the
+    # two Claude-session UUIDs the chat layer must route mailbox-only.
+    claude_ids = run_op_module.CLAUDE_IDS
+    assert isinstance(claude_ids, (set, frozenset, tuple, list)), (
+        "CLAUDE_IDS must be an iterable set-like container (spec §3.1 (3))."
+    )
+    assert _SAMPLE_D4_UUID in set(claude_ids), (
+        "CLAUDE_IDS must include the d4 session id."
+    )
+    assert _SAMPLE_6D_UUID in set(claude_ids), (
+        "CLAUDE_IDS must include the 6d session id (this test module's own "
+        "conversation id)."
+    )
+
+
+# --- § S.2 status action --------------------------------------------------
+
+
+def test_status_lock_missing_reports_alive_false_and_reason(run_op_module, fake_home):
+    """
+    Spec §3.1 (3): if `presence/<target_id>.lock` does not exist, status must
+    report `alive=False, reason="lock_missing", pid=None, start_time=None`.
+    """
+    payload = {
+        "action": "status",
+        "targets": [
+            {"alias": "qa", "target_id": _SAMPLE_AGY_UUID, "role": "QA"},
+        ],
+    }
+    result = run_op_module.run_status(payload)
+    assert result["ok"] is True
+    assert result["action"] == "status"
+    assert len(result["results"]) == 1
+    row = result["results"][0]
+    assert row["alias"] == "qa"
+    assert row["target_id"] == _SAMPLE_AGY_UUID
+    assert row["role"] == "QA"
+    assert row["alive"] is False
+    assert row["reason"] == "lock_missing"
+    assert row["pid"] is None
+    assert row["start_time"] is None
+
+
+def test_status_lock_present_but_process_not_found_reports_ambiguous(
+    monkeypatch, run_op_module, fake_home
+):
+    """
+    Spec §3.1 (3): if the lock exists but `find_process_by_lock_path` returns
+    None (not found or ambiguous), status must report
+    `alive=False, reason="process_not_found_or_ambiguous"`.
+    """
+    lock_path = fake_home / ".gemini" / "antigravity-cli" / "presence" / f"{_SAMPLE_AGY_UUID}.lock"
+    lock_path.write_text("", encoding="utf-8")
+
+    seen_kwargs: dict[str, _Any] = {}
+
+    def fake_find_process_by_lock_path(path, *, allowed_images=None, same_session_only=True):
+        seen_kwargs["path"] = path
+        seen_kwargs["allowed_images"] = allowed_images
+        seen_kwargs["same_session_only"] = same_session_only
+        return None
+
+    from agentknock.adapters import _win_console_ctypes as _wc_mod
+    monkeypatch.setattr(_wc_mod, "find_process_by_lock_path", fake_find_process_by_lock_path)
+
+    payload = {"action": "status", "targets": [{"alias": "qa", "target_id": _SAMPLE_AGY_UUID, "role": "QA"}]}
+    result = run_op_module.run_status(payload)
+    row = result["results"][0]
+    assert row["alive"] is False
+    assert row["reason"] == "process_not_found_or_ambiguous"
+    assert row["pid"] is None
+    assert row["start_time"] is None
+    # Spec §3.1 (3): status must use same_session_only=False (no AttachConsole
+    # is performed in status, so cross-session verification is appropriate).
+    assert seen_kwargs.get("same_session_only") is False, (
+        "status must call find_process_by_lock_path with same_session_only=False "
+        f"(got {seen_kwargs!r})"
+    )
+    # And allowed_images must be ("agy.exe",).
+    assert seen_kwargs.get("allowed_images") == ("agy.exe",), (
+        "status must constrain allowed_images to ('agy.exe',) for safety; "
+        f"got {seen_kwargs.get('allowed_images')!r}"
+    )
+
+
+def test_status_lock_present_and_process_found_reports_alive_ok(
+    monkeypatch, run_op_module, fake_home
+):
+    """
+    Spec §3.1 (3): if the lock exists and find_process_by_lock_path returns
+    (pid, start_time), status must report
+    `alive=True, reason="ok", pid=<int>, start_time=<int>`.
+    """
+    lock_path = fake_home / ".gemini" / "antigravity-cli" / "presence" / f"{_SAMPLE_AGY_UUID}.lock"
+    lock_path.write_text("", encoding="utf-8")
+
+    fake_identity = (9908, (0x01DC0000 << 32) | 0xABCDEF01)
+
+    from agentknock.adapters import _win_console_ctypes as _wc_mod
+    monkeypatch.setattr(
+        _wc_mod,
+        "find_process_by_lock_path",
+        lambda *_args, **_kwargs: fake_identity,
+    )
+
+    payload = {"action": "status", "targets": [{"alias": "qa", "target_id": _SAMPLE_AGY_UUID, "role": "QA"}]}
+    result = run_op_module.run_status(payload)
+    row = result["results"][0]
+    assert row["alive"] is True
+    assert row["reason"] == "ok"
+    assert row["pid"] == 9908
+    assert row["start_time"] == fake_identity[1]
+
+
+# --- § S.3 send action: Claude mailbox-only vs. agy wake --------------------
+
+
+class _FakeAgyAdapter:
+    """
+    Stand-in for AgyDeliveryAdapter capturing the ctor kwargs, wake() calls
+    and last_wake_detail state. run_op is expected to instantiate exactly
+    ONE of these per `run_send` invocation.
+    """
+
+    instances: list["_FakeAgyAdapter"] = []
+
+    def __init__(self, *, wake_locale=None, output_locale=None, **extra):
+        self.wake_locale = wake_locale
+        self.output_locale = output_locale
+        self.extra_ctor_kwargs = extra
+        self.wake_calls: list[str] = []
+        self.last_wake_detail: dict[str, _Any] = {
+            "reason": "ok",
+            "win32_error": 0,
+            "pid": 9908,
+            "verified_start_time": 1,
+            "backend": "fake",
+        }
+        _FakeAgyAdapter.instances.append(self)
+
+    def wake(self, target_id: str) -> bool:
+        self.wake_calls.append(target_id)
+        return True
+
+
+@pytest.fixture
+def fake_adapter_factory(monkeypatch, run_op_module):
+    """Replace AgyDeliveryAdapter in run_op with _FakeAgyAdapter and reset state."""
+    _FakeAgyAdapter.instances = []
+    monkeypatch.setattr(run_op_module, "AgyDeliveryAdapter", _FakeAgyAdapter)
+    return _FakeAgyAdapter
+
+
+class _FakeAgentKnock:
+    """
+    Minimal AgentKnock stand-in: captures ctor DI kwargs plus register_self /
+    send calls, returns synthetic msg_ids. Lets run_op tests exercise routing
+    (Claude vs agy) without going through the real Mailbox / FileSystemAlias-
+    Registry / FileLockLivenessProbe stack (which would hit Windows MAX_PATH
+    with the nested `.gemini/antigravity-cli/brain/<uuid>/.system_generated/
+    messages/undelivered/.<mid>.<hex>.tmp` paths under pytest's tmp_path).
+    """
+
+    instances: list["_FakeAgentKnock"] = []
+
+    def __init__(self, *, mailbox=None, registry=None, probe=None):
+        self.mailbox = mailbox
+        self.registry = registry
+        self.probe = probe
+        self.register_calls: list[dict[str, _Any]] = []
+        self.send_calls: list[dict[str, _Any]] = []
+        _FakeAgentKnock.instances.append(self)
+
+    def register_self(self, alias, target_id, *, role="", capabilities=None, ttl_sec=86400.0):
+        self.register_calls.append(
+            {"alias": alias, "target_id": target_id, "role": role, "ttl_sec": ttl_sec}
+        )
+
+    def send(self, recipient, content, *, sender):
+        msg_id = str(_uuid.uuid4())
+        self.send_calls.append(
+            {"recipient": recipient, "content": content, "sender": sender, "msg_id": msg_id}
+        )
+        return msg_id
+
+
+@pytest.fixture
+def fake_agentknock_factory(monkeypatch, run_op_module):
+    """
+    Replace `AgentKnock` inside run_op with `_FakeAgentKnock`. run_op builds
+    two instances per `run_send` (one with FileLockLivenessProbe, one with
+    AlwaysAliveProbe) so that each target can be routed via its appropriate
+    client; `_FakeAgentKnock.instances` collects both in construction order.
+    """
+    _FakeAgentKnock.instances = []
+    monkeypatch.setattr(run_op_module, "AgentKnock", _FakeAgentKnock)
+    return _FakeAgentKnock
+
+
+def test_send_to_claude_id_skips_wake_mailbox_only(
+    monkeypatch, run_op_module, fake_home, fake_adapter_factory, fake_agentknock_factory
+):
+    """
+    Spec §3.1 (2) / (3): when `target_id` is in `CLAUDE_IDS`, run_send must
+    - route the message via the AlwaysAliveProbe client (mailbox-only),
+    - NOT attempt CONIN$ injection (adapter.wake NOT called),
+    - record `woke=False, wake_detail="skipped_claude_mailbox_only"`.
+    """
+    payload = {
+        "action": "send",
+        "sender": "subleader-argon",
+        "targets": [
+            {
+                "alias": "d4",
+                "target_id": _SAMPLE_D4_UUID,  # d4 is a Claude session
+                "role": "Commander",
+                "wake": True,  # requested but must be ignored for Claude
+                "content": "hello d4",
+            }
+        ],
+    }
+    result = run_op_module.run_send(payload)
+    assert result["ok"] is True
+    assert result["action"] == "send"
+    row = result["results"][0]
+    assert row["alias"] == "d4"
+    assert row["target_id"] == _SAMPLE_D4_UUID
+    assert isinstance(row["msg_id"], str) and len(row["msg_id"]) > 0, (
+        "send must still enqueue a mailbox message even for Claude sessions."
+    )
+    assert row["woke"] is False, (
+        "Claude ID path must NOT wake (CONIN$ is skipped); "
+        f"got woke={row['woke']}, wake_detail={row.get('wake_detail')!r}"
+    )
+    assert row["wake_detail"] == "skipped_claude_mailbox_only", (
+        f"Claude ID path must record wake_detail='skipped_claude_mailbox_only'; "
+        f"got {row['wake_detail']!r}"
+    )
+
+    # And adapter.wake MUST NOT have been invoked for the Claude target.
+    for inst in _FakeAgyAdapter.instances:
+        assert _SAMPLE_D4_UUID not in inst.wake_calls, (
+            "AgyDeliveryAdapter.wake was called for a Claude target; "
+            "run_op must route Claude IDs through the mailbox-only path."
+        )
+
+
+def test_send_to_agy_target_invokes_wake_and_captures_last_wake_detail(
+    monkeypatch, run_op_module, fake_home, fake_adapter_factory, fake_agentknock_factory
+):
+    """
+    Spec §3.1 (3): when `target_id` is NOT in CLAUDE_IDS, run_send must invoke
+    `adapter.wake(target_id)` and record its outcome (adapter.last_wake_detail
+    is exposed via the `wake_detail` field).
+    """
+    payload = {
+        "action": "send",
+        "sender": "subleader-argon",
+        "targets": [
+            {
+                "alias": "qa",
+                "target_id": _SAMPLE_AGY_UUID,
+                "role": "QA",
+                "wake": True,
+                "content": "please verify",
+            }
+        ],
+    }
+    result = run_op_module.run_send(payload)
+    row = result["results"][0]
+    assert row["woke"] is True
+    # wake_detail is the adapter's dict — reason surfaces the L0 outcome.
+    wd = row["wake_detail"]
+    if isinstance(wd, dict):
+        assert wd.get("reason") == "ok"
+    else:
+        # Spec example shows it may be the dict directly or `last_wake_detail`
+        # attribute; either shape is acceptable as long as reason is reachable.
+        assert "ok" in str(wd).lower(), (
+            f"wake_detail should surface the L0 reason; got {wd!r}"
+        )
+    assert len(_FakeAgyAdapter.instances) == 1
+    inst = _FakeAgyAdapter.instances[0]
+    assert inst.wake_calls == [_SAMPLE_AGY_UUID], (
+        f"adapter.wake must be called exactly once with {_SAMPLE_AGY_UUID!r}; "
+        f"got {inst.wake_calls!r}"
+    )
+
+
+def test_send_respects_wake_false_flag_even_for_agy_target(
+    monkeypatch, run_op_module, fake_home, fake_adapter_factory, fake_agentknock_factory
+):
+    """
+    Spec §3.1 (2): per-target `wake: false` must suppress the CONIN$ nudge
+    even for agy (non-Claude) targets. Mailbox-only delivery still happens.
+    """
+    payload = {
+        "action": "send",
+        "sender": "orchestrator",
+        "targets": [
+            {
+                "alias": "qa",
+                "target_id": _SAMPLE_AGY_UUID,
+                "role": "QA",
+                "wake": False,
+                "content": "silent delivery",
+            }
+        ],
+    }
+    result = run_op_module.run_send(payload)
+    row = result["results"][0]
+    assert row["woke"] is False
+    assert isinstance(row["msg_id"], str) and row["msg_id"]
+    for inst in _FakeAgyAdapter.instances:
+        assert inst.wake_calls == [], (
+            "wake:false must suppress adapter.wake; "
+            f"got wake_calls={inst.wake_calls!r}"
+        )
+
+
+# --- § S.4 ack action -----------------------------------------------------
+
+
+def test_ack_removes_undelivered_marker_and_updates_read_json(
+    run_op_module, fake_home
+):
+    """
+    Spec §3.1 (3): ack must delete each `undelivered/<mid>` marker (when it
+    exists) and write `read.json` so that each acked id maps to True.
+    """
+    self_id = _SAMPLE_6D_UUID
+    msg_dir = fake_home / ".gemini" / "antigravity-cli" / "brain" / self_id / ".system_generated" / "messages"
+    undelivered_dir = msg_dir / "undelivered"
+    undelivered_dir.mkdir(parents=True, exist_ok=True)
+    mid_1 = "e895fec6-882f-4a85-933d-6c30ee8cc8fb"
+    mid_2 = str(_uuid.uuid4())
+    (undelivered_dir / mid_1).write_text("", encoding="utf-8")
+    (undelivered_dir / mid_2).write_text("", encoding="utf-8")
+
+    payload = {"action": "ack", "self_id": self_id, "message_ids": [mid_1, mid_2]}
+    result = run_op_module.run_ack(payload)
+    assert result["ok"] is True
+    assert result["action"] == "ack"
+    assert set(result["acked"]) == {mid_1, mid_2}
+    # Markers deleted.
+    assert not (undelivered_dir / mid_1).exists()
+    assert not (undelivered_dir / mid_2).exists()
+    # read.json created and both IDs mapped to True.
+    read_file = msg_dir / "read.json"
+    assert read_file.is_file()
+    data = _json.loads(read_file.read_text(encoding="utf-8"))
+    assert data.get(mid_1) is True
+    assert data.get(mid_2) is True
+
+
+def test_ack_merges_into_existing_read_json_without_dropping_prior_entries(
+    run_op_module, fake_home
+):
+    """
+    Regression guard: ack must MERGE into an existing read.json, not replace
+    it, so earlier acks are not lost on a subsequent ack call.
+    """
+    self_id = _SAMPLE_6D_UUID
+    msg_dir = fake_home / ".gemini" / "antigravity-cli" / "brain" / self_id / ".system_generated" / "messages"
+    undelivered_dir = msg_dir / "undelivered"
+    undelivered_dir.mkdir(parents=True, exist_ok=True)
+
+    prior_id = str(_uuid.uuid4())
+    (msg_dir / "read.json").write_text(
+        _json.dumps({prior_id: True}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    new_id = str(_uuid.uuid4())
+    (undelivered_dir / new_id).write_text("", encoding="utf-8")
+
+    result = run_op_module.run_ack(
+        {"action": "ack", "self_id": self_id, "message_ids": [new_id]}
+    )
+    assert new_id in result["acked"]
+    data = _json.loads((msg_dir / "read.json").read_text(encoding="utf-8"))
+    assert data.get(prior_id) is True, (
+        "ack must preserve prior read entries; existing read.json was clobbered."
+    )
+    assert data.get(new_id) is True
+
+
+def test_ack_tolerates_missing_undelivered_marker(run_op_module, fake_home):
+    """
+    Spec §3.1 (3): markers are only removed `if marker.exists()`. ack must
+    not raise when a marker was already consumed by a prior watcher pass.
+    """
+    self_id = _SAMPLE_6D_UUID
+    msg_dir = fake_home / ".gemini" / "antigravity-cli" / "brain" / self_id / ".system_generated" / "messages"
+    undelivered_dir = msg_dir / "undelivered"
+    undelivered_dir.mkdir(parents=True, exist_ok=True)
+    mid = str(_uuid.uuid4())  # marker intentionally NOT created
+    result = run_op_module.run_ack({"action": "ack", "self_id": self_id, "message_ids": [mid]})
+    assert result["ok"] is True
+    assert mid in result["acked"]
+    data = _json.loads((msg_dir / "read.json").read_text(encoding="utf-8"))
+    assert data.get(mid) is True
+
+
+# --- § S.5 Phase 1-C locale: defaults, payload passthrough, no forced "ja" ---
+
+
+def test_locale_defaults_to_none_so_adapter_uses_en_default(
+    monkeypatch, run_op_module, fake_home, fake_adapter_factory, fake_agentknock_factory
+):
+    """
+    Spec §3.3: when neither CLI args nor payload specify a locale, run_op
+    MUST NOT force any value — it passes `None` so that AgyDeliveryAdapter's
+    ctor-side resolution picks up `DEFAULT_LOCALE == "en"`. Specifically the
+    adapter must NOT be ctor'd with wake_locale="ja" or output_locale="ja".
+    """
+    payload = {
+        "action": "send",
+        "sender": "orchestrator",
+        "targets": [
+            {
+                "alias": "qa",
+                "target_id": _SAMPLE_AGY_UUID,
+                "role": "QA",
+                "wake": True,
+                "content": "english default",
+            }
+        ],
+    }
+    run_op_module.run_send(payload)
+    assert len(_FakeAgyAdapter.instances) == 1
+    inst = _FakeAgyAdapter.instances[0]
+    assert inst.wake_locale is None, (
+        "Phase 1-C invariant: run_op must not inject a default locale; "
+        f"got wake_locale={inst.wake_locale!r}. Spec §3.3."
+    )
+    assert inst.output_locale is None, (
+        "Phase 1-C invariant: run_op must not inject a default locale; "
+        f"got output_locale={inst.output_locale!r}. Spec §3.3."
+    )
+
+
+def test_locale_from_payload_passed_through_when_specified(
+    monkeypatch, run_op_module, fake_home, fake_adapter_factory, fake_agentknock_factory
+):
+    """
+    Spec §3.3: when `payload.wake_locale` / `payload.output_locale` are set,
+    they must reach the adapter ctor verbatim.
+    """
+    payload = {
+        "action": "send",
+        "sender": "orchestrator",
+        "wake_locale": "ja",
+        "output_locale": "ja",
+        "targets": [
+            {
+                "alias": "qa",
+                "target_id": _SAMPLE_AGY_UUID,
+                "role": "QA",
+                "wake": True,
+                "content": "日本語",
+            }
+        ],
+    }
+    run_op_module.run_send(payload)
+    assert len(_FakeAgyAdapter.instances) == 1
+    inst = _FakeAgyAdapter.instances[0]
+    assert inst.wake_locale == "ja"
+    assert inst.output_locale == "ja"
+
+
+def test_cli_locale_arg_overrides_payload_locale(
+    monkeypatch, run_op_module, fake_home, fake_adapter_factory, fake_agentknock_factory
+):
+    """
+    Spec §3.3: the `run_send` entrypoint takes `cli_wake_locale` /
+    `cli_output_locale` keyword-only arguments; when supplied they override
+    whatever is in the payload (CLI explicit wins over payload explicit).
+    """
+    payload = {
+        "action": "send",
+        "sender": "orchestrator",
+        "wake_locale": "ja",
+        "output_locale": "ja",
+        "targets": [
+            {
+                "alias": "qa",
+                "target_id": _SAMPLE_AGY_UUID,
+                "role": "QA",
+                "wake": True,
+                "content": "ζ",
+            }
+        ],
+    }
+    sig = inspect.signature(run_op_module.run_send)
+    assert "cli_wake_locale" in sig.parameters, (
+        "run_send must accept keyword-only `cli_wake_locale` per spec §3.1 (3)."
+    )
+    assert "cli_output_locale" in sig.parameters, (
+        "run_send must accept keyword-only `cli_output_locale` per spec §3.1 (3)."
+    )
+
+    run_op_module.run_send(payload, cli_wake_locale="fr", cli_output_locale="de")
+    assert len(_FakeAgyAdapter.instances) == 1
+    inst = _FakeAgyAdapter.instances[0]
+    assert inst.wake_locale == "fr", (
+        "CLI --wake-locale must win over payload.wake_locale; "
+        f"got {inst.wake_locale!r}"
+    )
+    assert inst.output_locale == "de", (
+        "CLI --output-locale must win over payload.output_locale; "
+        f"got {inst.output_locale!r}"
+    )
+
+
+def test_locale_cli_only_passed_through(
+    monkeypatch, run_op_module, fake_home, fake_adapter_factory, fake_agentknock_factory
+):
+    """
+    Spec §3.3: CLI args alone (no payload field) → adapter gets the CLI value.
+    This guards the common operator flow where `--wake-locale ja` is explicit
+    but payload.json omits the key.
+    """
+    payload = {
+        "action": "send",
+        "sender": "orchestrator",
+        "targets": [
+            {
+                "alias": "qa",
+                "target_id": _SAMPLE_AGY_UUID,
+                "role": "QA",
+                "wake": True,
+                "content": "en-config but ja-wake",
+            }
+        ],
+    }
+    run_op_module.run_send(payload, cli_wake_locale="ja", cli_output_locale=None)
+    inst = _FakeAgyAdapter.instances[0]
+    assert inst.wake_locale == "ja"
+    # output_locale left None so adapter uses "en" default.
+    assert inst.output_locale is None
+
+
+# --- § S.6 main() CLI entrypoint smoke (d4 contract 2026-11-20) -------------
+# Contract fixed by d4 for coder-a:
+#   main(argv=None) -> int:
+#     --payload (required) / --wake-locale / --output-locale (optional, None)
+#     payload = json.load(--payload)
+#     action: status -> run_status(payload)
+#             send   -> run_send(payload, cli_wake_locale=..., cli_output_locale=...)
+#             ack    -> run_ack(payload)
+#             other  -> {"ok": False, "error": "<...>"}
+#     print(json.dumps(result, ensure_ascii=False)) one line
+#     return 0 if result["ok"] else 1
+#     if __name__ == "__main__": raise SystemExit(main())
+
+
+def test_main_status_prints_json_and_returns_zero(
+    monkeypatch, capsys, run_op_module, fake_home, tmp_path
+):
+    """
+    `main(["--payload", <status payload path>])` must:
+      - load the payload JSON from the file,
+      - dispatch to run_status,
+      - emit exactly one line of JSON to stdout (parseable),
+      - return 0 when result.ok is True.
+    presence/find is mocked so status reports alive=True.
+    """
+    # A valid lock + mocked identity so run_status gives alive=True, ok=True.
+    lock_path = fake_home / ".gemini" / "antigravity-cli" / "presence" / f"{_SAMPLE_AGY_UUID}.lock"
+    lock_path.write_text("", encoding="utf-8")
+    from agentknock.adapters import _win_console_ctypes as _wc_mod
+    monkeypatch.setattr(
+        _wc_mod,
+        "find_process_by_lock_path",
+        lambda *_a, **_k: (9908, (0x01DC0000 << 32) | 0xABCDEF01),
+    )
+
+    payload_path = tmp_path / "status_payload.json"
+    payload_path.write_text(
+        _json.dumps({
+            "action": "status",
+            "targets": [
+                {"alias": "qa", "target_id": _SAMPLE_AGY_UUID, "role": "QA"},
+            ],
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    assert hasattr(run_op_module, "main"), (
+        "run_op.py must expose `main(argv=None) -> int` per d4 contract 2026-11-20."
+    )
+    rc = run_op_module.main(["--payload", str(payload_path)])
+    assert rc == 0, f"status success must return 0; got {rc}"
+
+    captured = capsys.readouterr()
+    lines = [ln for ln in captured.out.splitlines() if ln.strip()]
+    assert len(lines) == 1, (
+        "main() must print exactly one JSON line to stdout; "
+        f"got {len(lines)} non-empty lines: {lines!r}"
+    )
+    parsed = _json.loads(lines[0])
+    assert parsed["ok"] is True
+    assert parsed["action"] == "status"
+    assert isinstance(parsed["results"], list) and len(parsed["results"]) == 1
+    row = parsed["results"][0]
+    assert row["alive"] is True
+    assert row["reason"] == "ok"
+    assert row["pid"] == 9908
+
+
+def test_main_unknown_action_returns_one_with_ok_false(
+    capsys, run_op_module, fake_home, tmp_path
+):
+    """
+    Unknown `action` must yield `{"ok": False, "error": "..."}` on stdout and
+    return exit code 1. Guards against silent pass-through of typos/malformed
+    payloads.
+    """
+    payload_path = tmp_path / "bogus.json"
+    payload_path.write_text(
+        _json.dumps({"action": "bogus"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    rc = run_op_module.main(["--payload", str(payload_path)])
+    assert rc == 1, f"unknown action must return 1; got {rc}"
+
+    captured = capsys.readouterr()
+    lines = [ln for ln in captured.out.splitlines() if ln.strip()]
+    assert len(lines) == 1
+    parsed = _json.loads(lines[0])
+    assert parsed["ok"] is False
+    assert "error" in parsed and isinstance(parsed["error"], str) and parsed["error"], (
+        f"unknown action must include a human-readable `error` string; got {parsed!r}"
+    )
+
+
+def test_main_cli_locale_flags_reach_run_send_as_kwargs(
+    monkeypatch, capsys, run_op_module, fake_home, tmp_path, fake_adapter_factory, fake_agentknock_factory
+):
+    """
+    CLI flags `--wake-locale` / `--output-locale` must reach `run_send` as
+    keyword-only `cli_wake_locale` / `cli_output_locale` so that CLI-explicit
+    locale wins over payload-explicit. We intercept run_send to capture the
+    exact kwargs main() hands it.
+    """
+    captured_kwargs: dict[str, _Any] = {}
+    original_run_send = run_op_module.run_send
+
+    def intercepting_run_send(payload, **kwargs):
+        captured_kwargs.update(kwargs)
+        # Delegate so stdout stays JSON-shaped and the test behaves like a
+        # real send call (adapter is the _FakeAgyAdapter via fixture).
+        return original_run_send(payload, **kwargs)
+
+    monkeypatch.setattr(run_op_module, "run_send", intercepting_run_send)
+
+    payload_path = tmp_path / "send.json"
+    payload_path.write_text(
+        _json.dumps({
+            "action": "send",
+            "sender": "orchestrator",
+            # Payload locales intentionally present so we can assert CLI wins
+            # at the run_send boundary (payload-vs-CLI precedence lives inside
+            # run_send; here we only assert main hands CLI values through).
+            "wake_locale": "ja",
+            "output_locale": "ja",
+            "targets": [
+                {
+                    "alias": "qa",
+                    "target_id": _SAMPLE_AGY_UUID,
+                    "role": "QA",
+                    "wake": True,
+                    "content": "cli-locale smoke",
+                },
+            ],
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    rc = run_op_module.main(
+        ["--payload", str(payload_path), "--wake-locale", "fr", "--output-locale", "de"]
+    )
+    assert rc == 0, f"successful send must return 0; got {rc}"
+
+    assert captured_kwargs.get("cli_wake_locale") == "fr", (
+        f"main() must forward --wake-locale as cli_wake_locale; "
+        f"got {captured_kwargs!r}"
+    )
+    assert captured_kwargs.get("cli_output_locale") == "de", (
+        f"main() must forward --output-locale as cli_output_locale; "
+        f"got {captured_kwargs!r}"
+    )
+
+    # And the adapter ultimately gets the CLI-explicit values (end-to-end).
+    inst = _FakeAgyAdapter.instances[-1]
+    assert inst.wake_locale == "fr"
+    assert inst.output_locale == "de"
+
+    # Also sanity-check stdout is still a parseable one-line JSON.
+    lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.strip()]
+    assert len(lines) == 1
+    parsed = _json.loads(lines[0])
+    assert parsed["ok"] is True
+    assert parsed["action"] == "send"
