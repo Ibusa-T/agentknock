@@ -233,6 +233,81 @@ def _normalize_allowed_images(object allowed_images):
     return {os.path.basename(str(img)).strip().lower() for img in allowed_images if str(img).strip()}
 
 
+cdef inline bint _match_allowed_w_nogil(
+    const wchar_t* eb,
+    Py_ssize_t eb_len,
+    const wchar_t* allowed,
+    Py_ssize_t allowed_len,
+) noexcept nogil:
+    """nogil C comparison: exact match OR `<allowed>.<1+ ASCII digits>.old`."""
+    cdef Py_ssize_t i = 0
+    cdef Py_ssize_t middle_start = 0
+    cdef Py_ssize_t middle_end = 0
+    cdef wchar_t c = 0
+    if eb == NULL or allowed == NULL or eb_len <= 0 or allowed_len <= 0:
+        return 0
+    if eb_len == allowed_len:
+        for i in range(eb_len):
+            if eb[i] != allowed[i]:
+                return 0
+        return 1
+    if eb_len < allowed_len + 6:
+        return 0
+    for i in range(allowed_len):
+        if eb[i] != allowed[i]:
+            return 0
+    if eb[allowed_len] != <wchar_t>46:  # '.'
+        return 0
+    if (
+        eb[eb_len - 4] != <wchar_t>46
+        or eb[eb_len - 3] != <wchar_t>111
+        or eb[eb_len - 2] != <wchar_t>108
+        or eb[eb_len - 1] != <wchar_t>100
+    ):
+        return 0
+    middle_start = allowed_len + 1
+    middle_end = eb_len - 4
+    if middle_end <= middle_start:
+        return 0
+    for i in range(middle_start, middle_end):
+        c = eb[i]
+        if c < <wchar_t>48 or c > <wchar_t>57:
+            return 0
+    return 1
+
+
+def _image_matches_allowed(object exe_base, object allowed_set):
+    """Return True if `exe_base` matches `allowed_set` or `<allowed>.<digits>.old`."""
+    if not exe_base or not allowed_set:
+        return False
+    cdef str eb = str(exe_base).lower()
+    cdef Py_ssize_t eb_len = 0
+    cdef wchar_t* eb_w = PyUnicode_AsWideCharString(eb, &eb_len)
+    if eb_w == NULL:
+        raise MemoryError("Failed to allocate wide char string")
+    cdef Py_ssize_t allowed_len = 0
+    cdef wchar_t* allowed_w = NULL
+    cdef bint matched = 0
+    try:
+        for allowed in allowed_set:
+            if not isinstance(allowed, str) or not allowed:
+                continue
+            allowed_w = PyUnicode_AsWideCharString(<str>allowed, &allowed_len)
+            if allowed_w == NULL:
+                raise MemoryError("Failed to allocate wide char string")
+            with nogil:
+                matched = _match_allowed_w_nogil(eb_w, eb_len, allowed_w, allowed_len)
+            PyMem_Free(allowed_w)
+            allowed_w = NULL
+            if matched:
+                return True
+        return False
+    finally:
+        if allowed_w != NULL:
+            PyMem_Free(allowed_w)
+        PyMem_Free(eb_w)
+
+
 def _query_image_basename_py(unsigned long pid):
     """Helper using OpenProcess + QueryFullProcessImageNameW for Python-side allowlist check."""
     cdef HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, <DWORD>pid)
@@ -361,7 +436,7 @@ cpdef object find_process_by_lock_path(
                     if not QueryFullProcessImageNameW(h_proc, 0, exe_buf, &exe_len):
                         continue
                     exe_path = PyUnicode_FromWideChar(exe_buf, <Py_ssize_t>exe_len)
-                    if os.path.basename(exe_path).lower() not in allowed_set:
+                    if not _image_matches_allowed(os.path.basename(exe_path), allowed_set):
                         continue
 
                 verified[<int>cand_pid] = <object>actual_ft
@@ -652,7 +727,7 @@ cpdef tuple inject_console_input_verified(
                 if not QueryFullProcessImageNameW(h_proc, 0, exe_buf, &exe_len):
                     return (False, "image_query_failed", <int>GetLastError())
                 exe_path = PyUnicode_FromWideChar(exe_buf, <Py_ssize_t>exe_len)
-                if os.path.basename(exe_path).lower() not in allowed_set:
+                if not _image_matches_allowed(os.path.basename(exe_path), allowed_set):
                     return (False, "image_name_mismatch", 0)
 
             # [Step 5] Console attach + CONIN$ write under nogil while holding h_proc

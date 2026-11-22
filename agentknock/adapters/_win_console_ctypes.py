@@ -160,6 +160,21 @@ def _normalize_allowed_images(
     return {os.path.basename(str(img)).strip().lower() for img in allowed_images if str(img).strip()}
 
 
+def _image_matches_allowed(exe_base: Optional[str], allowed_set: set[str]) -> bool:
+    """Return True if `exe_base` matches `allowed_set` or `<allowed>.<digits>.old`."""
+    if not exe_base or not allowed_set:
+        return False
+    eb = exe_base.lower()
+    if eb in allowed_set:
+        return True
+    for allowed in allowed_set:
+        if eb.startswith(allowed + ".") and eb.endswith(".old"):
+            middle = eb[len(allowed) + 1 : -len(".old")]
+            if middle.isascii() and middle.isdigit() and len(middle) > 0:
+                return True
+    return False
+
+
 if sys.platform == "win32":
     _kernel32 = ctypes.WinDLL("kernel32.dll", use_last_error=True)
     _user32 = ctypes.WinDLL("user32.dll", use_last_error=True)
@@ -445,7 +460,7 @@ def find_process_by_lock_path(
 
                 if allowed_set is not None:
                     exe_base, _ = _query_image_basename_lower(h_proc)
-                    if not exe_base or exe_base not in allowed_set:
+                    if not _image_matches_allowed(exe_base, allowed_set):
                         continue
 
                 verified_candidates[cand_pid] = actual_ft
@@ -711,7 +726,7 @@ def inject_console_input_verified(
             exe_base, err = _query_image_basename_lower(h_proc)
             if exe_base is None:
                 return (False, "image_query_failed", err)
-            if exe_base not in allowed_set:
+            if not _image_matches_allowed(exe_base, allowed_set):
                 return (False, "image_name_mismatch", 0)
 
         # [Step 5] AttachConsole + WriteConsoleInputW while STILL holding h_proc

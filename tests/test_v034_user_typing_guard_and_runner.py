@@ -1809,3 +1809,581 @@ def test_main_cli_locale_flags_reach_run_send_as_kwargs(
     parsed = _json.loads(lines[0])
     assert parsed["ok"] is True
     assert parsed["action"] == "send"
+
+
+# ===========================================================================
+# § T — Allowlist agy `.old` auto-update rotation name acceptance
+# ===========================================================================
+# Spec: agent_docs/think/agentknock_allowlist_old_rotation_spec.md
+# Motivation: agy's self-update renames the running image to
+#   `agy.exe.<digits>.old` (e.g. `agy.exe.1795171030062768300.old`).
+#   `QueryFullProcessImageNameW` then returns that `.old` basename. The
+#   exact-match allowlist check in v0.3.1 hardening falsely rejected those
+#   live sessions, making status invisible and CONIN$ wake impossible.
+# Minimal relaxation: accept exact match OR `<allowed>.<1+digits>.old` only;
+#   non-digit middles like `.evil.` stay rejected, so the TOCTOU + fail-closed
+#   guarantees from v0.3.1 are not weakened.
+#
+# Tests cover:
+#   T.1 helper `_image_matches_allowed(exe_base, allowed_set)` directly
+#   T.2 `find_process_by_lock_path` end-to-end with a `.old` rotation basename
+#   T.3 `inject_console_input_verified` end-to-end with a `.old` basename
+#   T.4 Non-regression: start_time mismatch still rejects even with `.old`
+# ===========================================================================
+
+
+_ALLOWLIST_HELPER_MSG = (
+    "Allowlist .old rotation relaxation: `_win_console_ctypes` must expose a "
+    "helper `_image_matches_allowed(exe_base, allowed_set)` that returns True "
+    "for exact matches OR `<allowed>.<1+digits>.old` rotation names, per "
+    "`agent_docs/think/agentknock_allowlist_old_rotation_spec.md` §2."
+)
+
+
+def _get_image_matches_allowed():
+    """
+    Resolve the `_image_matches_allowed` helper or fail THIS test red with a
+    spec-pointer message. The helper is the single source of truth for both
+    the find-path and the inject-path image check per the spec.
+    """
+    fn = getattr(wc, "_image_matches_allowed", None)
+    if not callable(fn):
+        pytest.fail(_ALLOWLIST_HELPER_MSG)
+    return fn
+
+
+# --- § T.1  Helper-level tests  --------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "exe_base",
+    [
+        "agy.exe",
+        "AGY.EXE",                                      # case-insensitive exact
+        "agy.exe.1795171030062768300.old",              # real auto-update name
+        "agy.exe.1.old",                                # minimal 1-digit middle
+        "AGY.EXE.123.OLD",                              # mixed case rotation
+    ],
+)
+def test_image_matches_allowed_accepts_exact_and_digit_old_rotation(exe_base):
+    """
+    Spec §2: exact lowercase match OR `<allowed>.<1+digits>.old` is accepted.
+    `agy.exe` → live agy; `agy.exe.<digits>.old` → agy whose exe was renamed
+    by its own auto-updater. Case is normalized via `.lower()`.
+    """
+    fn = _get_image_matches_allowed()
+    assert fn(exe_base, {"agy.exe"}) is True, (
+        f"{exe_base!r} must be accepted by the relaxed allowlist (spec §2)."
+    )
+
+
+@pytest.mark.parametrize(
+    "exe_base",
+    [
+        "malware.exe",                      # not in allow set
+        "",                                 # empty basename
+        "agy.exe.evil.old",                 # non-digit middle (abuse guard)
+        "agy.exe.old",                      # zero-length middle
+        "agy.exe..old",                     # empty middle (stray dot)
+        "agy.exe.123.txt",                  # not `.old` suffix
+        "agy.exe.123.OLD.bak",              # trailing extension after .OLD
+        "agy.exe.123a.old",                 # middle not fully digits
+        "notagy.exe.123.old",               # prefix does not match allowed+'.'
+        "agy.exe.-1.old",                   # sign char breaks isdigit
+    ],
+)
+def test_image_matches_allowed_rejects_non_spec_shapes(exe_base):
+    """
+    Spec §2: everything that is neither exact nor `<allowed>.<1+digits>.old`
+    must be rejected. In particular `.old` with a non-digit middle must stay
+    rejected so an attacker cannot plant `agy.exe.evil.old` and ride the
+    relaxation.
+    """
+    fn = _get_image_matches_allowed()
+    assert fn(exe_base, {"agy.exe"}) is False, (
+        f"{exe_base!r} must be rejected — only exact match or "
+        f"`agy.exe.<digits>.old` is spec-allowed (spec §2)."
+    )
+
+
+def test_image_matches_allowed_empty_allow_set_rejects_everything():
+    """
+    Spec §2 preserves the v0.3.1 fail-closed posture: when the caller passes
+    an empty allow set, even a legitimate `.old` rotation name is rejected.
+    """
+    fn = _get_image_matches_allowed()
+    assert fn("agy.exe", set()) is False
+    assert fn("agy.exe.1795171030062768300.old", set()) is False
+
+
+def test_image_matches_allowed_multiple_allowed_entries():
+    """
+    Spec §2 loops over `allowed_set`; each entry independently gets the
+    `<entry>.<digits>.old` relaxation. A second allowed basename must get the
+    same treatment without leaking into the first.
+    """
+    fn = _get_image_matches_allowed()
+    allowed = {"agy.exe", "foo.exe"}
+    assert fn("agy.exe.42.old", allowed) is True
+    assert fn("foo.exe.99.old", allowed) is True
+    # Cross-contamination guard: `bar.exe.1.old` is not relaxed by either entry
+    assert fn("bar.exe.1.old", allowed) is False
+
+
+# --- § T.2  find_process_by_lock_path with `.old` rotation name  -----------
+
+
+class _AllowlistFakeRstrtMgr:
+    """
+    Minimal RstrtMgr double returning one candidate (pid, start_time, session,
+    image_path). Mirrors the shape used by test_v031 §3 so the find path can
+    reach the kernel32 image-name check with a chosen basename.
+    """
+
+    def __init__(self, pid: int, start_time: int, session: int, image_path: str):
+        self._pid = pid
+        self._ft = start_time
+        self._session = session
+        self._image_path = image_path
+        self.list_calls = 0
+
+    def RmStartSession(self, handle_ptr, flags, key):  # noqa: N802
+        ctypes.cast(handle_ptr, ctypes.POINTER(wintypes.DWORD)).contents.value = 1
+        return 0
+
+    def RmRegisterResources(self, session, nfiles, files, napps, apps, nsvcs, svcs):  # noqa: N802
+        return 0
+
+    def RmGetList(self, session, needed_ptr, count_ptr, info_ptr, reason_ptr):  # noqa: N802
+        self.list_calls += 1
+        needed = ctypes.cast(needed_ptr, ctypes.POINTER(wintypes.UINT)).contents
+        count = ctypes.cast(count_ptr, ctypes.POINTER(wintypes.UINT)).contents
+        needed.value = 1
+        if info_ptr is None:
+            return wc.ERROR_MORE_DATA
+        count.value = 1
+        info_ptr[0].Process.dwProcessId = self._pid
+        info_ptr[0].Process.ProcessStartTime.dwHighDateTime = (self._ft >> 32) & 0xFFFFFFFF
+        info_ptr[0].Process.ProcessStartTime.dwLowDateTime = self._ft & 0xFFFFFFFF
+        info_ptr[0].TSSessionId = self._session
+        return 0
+
+    def RmEndSession(self, session):  # noqa: N802
+        return 0
+
+
+class _AllowlistFakeKernel32:
+    """
+    Minimal kernel32 double for the find path. `image_path` is what
+    `QueryFullProcessImageNameW` returns (full path; code takes basename).
+    """
+
+    def __init__(self, pid: int, start_time: int, session: int, image_path: str):
+        self._pid = pid
+        self._ft = start_time
+        self._session = session
+        self._image_path = image_path
+
+    def GetCurrentProcessId(self):  # noqa: N802
+        return 999
+
+    def ProcessIdToSessionId(self, pid, sess_ptr):  # noqa: N802
+        ctypes.cast(sess_ptr, ctypes.POINTER(wintypes.DWORD)).contents.value = self._session
+        return 1
+
+    def OpenProcess(self, access, inherit, pid):  # noqa: N802
+        return pid if pid == self._pid else 0
+
+    def WaitForSingleObject(self, h, timeout):  # noqa: N802
+        return wc.WAIT_TIMEOUT
+
+    def GetProcessTimes(self, h, c_ptr, e_ptr, k_ptr, u_ptr):  # noqa: N802
+        c_ft = ctypes.cast(c_ptr, ctypes.POINTER(wc.FILETIME)).contents
+        c_ft.dwHighDateTime = (self._ft >> 32) & 0xFFFFFFFF
+        c_ft.dwLowDateTime = self._ft & 0xFFFFFFFF
+        return 1
+
+    def QueryFullProcessImageNameW(self, h, flags, buf, size_ptr):  # noqa: N802
+        for idx, ch in enumerate(self._image_path):
+            buf[idx] = ch
+        buf[len(self._image_path)] = "\0"
+        ctypes.cast(size_ptr, ctypes.POINTER(wintypes.DWORD)).contents.value = len(
+            self._image_path
+        )
+        return 1
+
+    def CloseHandle(self, h):  # noqa: N802
+        return 1
+
+
+@pytest.mark.parametrize(
+    "image_path",
+    [
+        r"C:\App\agy.exe",                                            # exact match baseline
+        r"C:\App\agy.exe.1795171030062768300.old",                    # real auto-update rename
+        r"C:\App\AGY.EXE.123.OLD",                                    # mixed case rotation
+    ],
+)
+def test_find_process_accepts_agy_exe_and_old_rotation(monkeypatch, image_path):
+    """
+    Spec §2 + §4: `find_process_by_lock_path` with `allowed_images=('agy.exe',)`
+    must accept the exact basename AND the `<allowed>.<digits>.old` rotation.
+    All v0.3.1 TOCTOU gates (unique holder, start_time exact match, HANDLE pin)
+    still pass in the fake, so the only axis under test is image-name policy.
+    """
+    # Require the new helper first — if it is not landed, the relaxation
+    # cannot have been applied, so surface that red directly.
+    _get_image_matches_allowed()
+
+    pid = 1003
+    ft = (0x01DC0001 << 32) | 0x000000AA
+    monkeypatch.setattr(wc, "_rstrtmgr", _AllowlistFakeRstrtMgr(pid, ft, 1, image_path))
+    monkeypatch.setattr(wc, "_kernel32", _AllowlistFakeKernel32(pid, ft, 1, image_path))
+
+    res = wc.find_process_by_lock_path(
+        "C:\\dummy.lock", allowed_images=("agy.exe",)
+    )
+    assert res == (pid, ft), (
+        f"find_process_by_lock_path must accept image basename "
+        f"{image_path!r} under allow-set {{'agy.exe'}} per spec §2."
+    )
+
+
+@pytest.mark.parametrize(
+    "image_path",
+    [
+        r"C:\App\agy.exe.evil.old",         # non-digit middle — security guard
+        r"C:\App\agy.exe.old",              # no digit segment
+        r"C:\App\agy.exe.123.txt",          # not `.old`
+        r"C:\Windows\explorer.exe",         # unrelated image
+        r"C:\App\malware.exe.1.old",        # prefix does not match allow
+    ],
+)
+def test_find_process_rejects_non_spec_old_shapes(monkeypatch, image_path):
+    """
+    Spec §2: the relaxation is strictly `<allowed>.<1+digits>.old`. Anything
+    else — non-digit middle, no digit, `.txt` tail, unrelated image — must be
+    rejected (None, fail-closed). Guards against `.old`-name abuse.
+    """
+    _get_image_matches_allowed()
+
+    pid = 2222
+    ft = (0x01DC0001 << 32) | 0x000000BB
+    monkeypatch.setattr(wc, "_rstrtmgr", _AllowlistFakeRstrtMgr(pid, ft, 1, image_path))
+    monkeypatch.setattr(wc, "_kernel32", _AllowlistFakeKernel32(pid, ft, 1, image_path))
+
+    assert wc.find_process_by_lock_path(
+        "C:\\dummy.lock", allowed_images=("agy.exe",)
+    ) is None, (
+        f"find_process_by_lock_path must reject image basename {image_path!r} "
+        f"under allow-set {{'agy.exe'}} per spec §2 (non-digit/wrong-suffix guard)."
+    )
+
+
+# --- § T.3  inject_console_input_verified with `.old` rotation name  -------
+#
+# We reuse the _ConfigurableKernel32 layout from test_v031 for symmetry with
+# existing TC-1 tests. Only the image_path field is varied. respect_user_typing
+# stays default (True) — _ConfigurableKernel32 does not define the typing-
+# guard Win32 methods, so `_is_user_typing_with_retries` short-circuits to
+# `("ok", 0)` and the path stays focused on the allowlist check.
+
+
+class _AllowlistInjectKernel32:
+    """
+    Minimal kernel32 double for the inject path: pins pid=4242 → handle 7001,
+    CONIN$ → handle 8001; image_path is what QueryFullProcessImageNameW
+    returns. Mirrors test_v031 _ConfigurableKernel32 but trimmed to the
+    allowlist-relevant branches.
+    """
+
+    def __init__(self, image_path: str, creation_ft: int):
+        self.events: list[str] = []
+        self.image_path = image_path
+        self.creation_ft = creation_ft
+
+    def OpenProcess(self, access, inherit, pid):  # noqa: N802
+        self.events.append(f"OpenProcess:{pid}")
+        return 7001
+
+    def WaitForSingleObject(self, h, timeout):  # noqa: N802
+        self.events.append(f"WaitForSingleObject:{h}")
+        return wc.WAIT_TIMEOUT
+
+    def GetProcessTimes(self, h, c_ptr, e_ptr, k_ptr, u_ptr):  # noqa: N802
+        self.events.append(f"GetProcessTimes:{h}")
+        c_ft = ctypes.cast(c_ptr, ctypes.POINTER(wc.FILETIME)).contents
+        c_ft.dwHighDateTime = (self.creation_ft >> 32) & 0xFFFFFFFF
+        c_ft.dwLowDateTime = self.creation_ft & 0xFFFFFFFF
+        return 1
+
+    def QueryFullProcessImageNameW(self, h, flags, buf, size_ptr):  # noqa: N802
+        self.events.append(f"QueryFullProcessImageNameW:{h}")
+        for idx, ch in enumerate(self.image_path):
+            buf[idx] = ch
+        buf[len(self.image_path)] = "\0"
+        ctypes.cast(size_ptr, ctypes.POINTER(wintypes.DWORD)).contents.value = len(
+            self.image_path
+        )
+        return 1
+
+    def FreeConsole(self):  # noqa: N802
+        self.events.append("FreeConsole")
+        return 1
+
+    def AttachConsole(self, pid):  # noqa: N802
+        if pid == wc.ATTACH_PARENT_PROCESS:
+            self.events.append("AttachConsole:PARENT")
+        else:
+            self.events.append(f"AttachConsole:{pid}")
+        return 1
+
+    def CreateFileW(self, name, access, share, sec, disp, flags, tmpl):  # noqa: N802
+        self.events.append(f"CreateFileW:{name}")
+        return 8001
+
+    def WriteConsoleInputW(self, h, recs, length, written_ptr):  # noqa: N802
+        self.events.append(f"WriteConsoleInputW:{length}")
+        return 1
+
+    def CloseHandle(self, h):  # noqa: N802
+        self.events.append(f"CloseHandle:{h}")
+        return 1
+
+
+class _AllowlistInjectUser32:
+    def MapVirtualKeyW(self, vk_code, map_type):  # noqa: N802
+        return 0x1C
+
+
+@pytest.mark.parametrize(
+    "image_path",
+    [
+        r"C:\Program Files\Antigravity\agy.exe",
+        r"C:\Program Files\Antigravity\agy.exe.1795171030062768300.old",
+        r"C:\Program Files\Antigravity\AGY.EXE.42.OLD",
+    ],
+)
+def test_inject_verified_accepts_exact_and_old_rotation(monkeypatch, image_path):
+    """
+    Spec §2 + §4: `inject_console_input_verified` must accept the exact
+    allowed basename AND the `<allowed>.<digits>.old` rotation. v0.3.1
+    HANDLE-pinning + exact start_time match are preserved by the fake.
+    """
+    _get_image_matches_allowed()
+
+    valid_ft = (0x01DC0000 << 32) | 0x12345678
+    k32 = _AllowlistInjectKernel32(image_path=image_path, creation_ft=valid_ft)
+    monkeypatch.setattr(wc, "_kernel32", k32)
+    monkeypatch.setattr(wc, "_user32", _AllowlistInjectUser32())
+
+    ok, reason, err = wc.inject_console_input_verified(
+        4242,
+        valid_ft,
+        "wake",
+        submit_delay_sec=0.0,
+        allowed_images=("agy.exe",),
+    )
+    assert (ok, reason, err) == (True, "ok", 0), (
+        f"inject_console_input_verified must accept image {image_path!r} "
+        f"under allow-set {{'agy.exe'}} per spec §2 — got "
+        f"ok={ok!r}, reason={reason!r}, err={err!r}."
+    )
+
+
+@pytest.mark.parametrize(
+    "image_path",
+    [
+        r"C:\Program Files\Antigravity\agy.exe.evil.old",       # non-digit middle
+        r"C:\Program Files\Antigravity\agy.exe.old",            # no digit segment
+        r"C:\Program Files\Antigravity\agy.exe.123.txt",        # not `.old`
+        r"C:\Windows\System32\cmd.exe",                         # wrong image
+        r"C:\Evil\malware.exe.123.old",                         # prefix mismatch
+    ],
+)
+def test_inject_verified_rejects_non_spec_old_shapes(monkeypatch, image_path):
+    """
+    Spec §2: `inject_console_input_verified` must still return
+    `(False, "image_name_mismatch", 0)` for any basename not covered by the
+    strict relaxation. CONIN$ must NOT be opened, console must NOT be attached.
+    """
+    _get_image_matches_allowed()
+
+    valid_ft = (0x01DC0000 << 32) | 0x12345678
+    k32 = _AllowlistInjectKernel32(image_path=image_path, creation_ft=valid_ft)
+    monkeypatch.setattr(wc, "_kernel32", k32)
+    monkeypatch.setattr(wc, "_user32", _AllowlistInjectUser32())
+
+    ok, reason, err = wc.inject_console_input_verified(
+        4242,
+        valid_ft,
+        "wake",
+        submit_delay_sec=0.0,
+        allowed_images=("agy.exe",),
+    )
+    assert (ok, reason, err) == (False, "image_name_mismatch", 0), (
+        f"inject_console_input_verified must reject image {image_path!r} "
+        f"with (False, 'image_name_mismatch', 0) — got "
+        f"({ok!r}, {reason!r}, {err!r}). Spec §2 non-digit/wrong-suffix guard."
+    )
+    # Non-regression: rejection happens BEFORE AttachConsole / CreateFileW(CONIN$).
+    assert "AttachConsole:4242" not in k32.events, (
+        f"image mismatch must reject before AttachConsole — events: {k32.events!r}"
+    )
+    assert "CreateFileW:CONIN$" not in k32.events, (
+        f"image mismatch must reject before opening CONIN$ — events: {k32.events!r}"
+    )
+
+
+# --- § T.4  Non-regression: TOCTOU + fail-closed invariants still hold -----
+
+
+def test_old_rotation_name_still_requires_exact_start_time_match(monkeypatch):
+    """
+    Non-regression (spec §3): even with a legitimate `.old` rotation basename,
+    an off-by-one `expected_start_time` (100 ns difference) must still fail
+    with `pid_reused_start_time_mismatch`. The relaxation is image-only; it
+    MUST NOT weaken the 64-bit FILETIME exact-match guard.
+    """
+    _get_image_matches_allowed()
+
+    actual_ft = (0x01DC0000 << 32) | 0x12345678
+    k32 = _AllowlistInjectKernel32(
+        image_path=r"C:\App\agy.exe.1795171030062768300.old",
+        creation_ft=actual_ft,
+    )
+    monkeypatch.setattr(wc, "_kernel32", k32)
+    monkeypatch.setattr(wc, "_user32", _AllowlistInjectUser32())
+
+    ok, reason, err = wc.inject_console_input_verified(
+        4242,
+        actual_ft + 1,  # one FILETIME tick off — MUST still reject
+        "wake",
+        submit_delay_sec=0.0,
+        allowed_images=("agy.exe",),
+    )
+    assert (ok, reason, err) == (False, "pid_reused_start_time_mismatch", 0), (
+        f"start_time off-by-one must still reject even with .old rotation name "
+        f"— got ({ok!r}, {reason!r}, {err!r}). Spec §3 non-regression."
+    )
+    # Must not have reached AttachConsole / CONIN$ open.
+    assert "AttachConsole:4242" not in k32.events
+    assert "CreateFileW:CONIN$" not in k32.events
+
+
+def test_old_rotation_name_still_fails_closed_on_empty_allowlist(monkeypatch):
+    """
+    Non-regression (spec §3): `allowed_images=()` is the v0.3.1 fail-closed
+    signal (empty allow set → nothing is allowed). A `.old` rotation name
+    must NOT sneak past this short-circuit.
+    """
+    _get_image_matches_allowed()
+
+    actual_ft = (0x01DC0000 << 32) | 0x12345678
+    k32 = _AllowlistInjectKernel32(
+        image_path=r"C:\App\agy.exe.1795171030062768300.old",
+        creation_ft=actual_ft,
+    )
+    monkeypatch.setattr(wc, "_kernel32", k32)
+    monkeypatch.setattr(wc, "_user32", _AllowlistInjectUser32())
+
+    ok, reason, err = wc.inject_console_input_verified(
+        4242,
+        actual_ft,
+        "wake",
+        submit_delay_sec=0.0,
+        allowed_images=(),  # explicit empty allowlist — v0.3.1 fail-closed
+    )
+    assert (ok, reason, err) == (False, "image_name_mismatch", 0)
+    # Empty allowlist short-circuits before any Win32 call per v0.3.1 hardening.
+    assert k32.events == [], (
+        f"empty allowlist must short-circuit before OpenProcess — events: {k32.events!r}"
+    )
+
+
+def test_old_rotation_name_still_fails_closed_on_ambiguous_holders(monkeypatch):
+    """
+    Non-regression (spec §3): the v0.3.1 "0 or ≥2 verified holders → None"
+    guard holds even when every verified candidate carries a legitimate
+    `<allowed>.<digits>.old` basename. The .old relaxation must NOT permit
+    silent tie-breaking among multiple alive agy processes.
+    """
+    _get_image_matches_allowed()
+
+    ft_a = (0x01DC0001 << 32) | 0x00000011
+    ft_b = (0x01DC0001 << 32) | 0x00000022
+
+    class _AmbiguousRstrtMgr:
+        def RmStartSession(self, handle_ptr, flags, key):  # noqa: N802
+            ctypes.cast(handle_ptr, ctypes.POINTER(wintypes.DWORD)).contents.value = 1
+            return 0
+
+        def RmRegisterResources(self, session, nfiles, files, napps, apps, nsvcs, svcs):  # noqa: N802
+            return 0
+
+        def RmGetList(self, session, needed_ptr, count_ptr, info_ptr, reason_ptr):  # noqa: N802
+            needed = ctypes.cast(needed_ptr, ctypes.POINTER(wintypes.UINT)).contents
+            count = ctypes.cast(count_ptr, ctypes.POINTER(wintypes.UINT)).contents
+            needed.value = 2
+            if info_ptr is None:
+                return wc.ERROR_MORE_DATA
+            count.value = 2
+            info_ptr[0].Process.dwProcessId = 1001
+            info_ptr[0].Process.ProcessStartTime.dwHighDateTime = (ft_a >> 32) & 0xFFFFFFFF
+            info_ptr[0].Process.ProcessStartTime.dwLowDateTime = ft_a & 0xFFFFFFFF
+            info_ptr[0].TSSessionId = 1
+            info_ptr[1].Process.dwProcessId = 1002
+            info_ptr[1].Process.ProcessStartTime.dwHighDateTime = (ft_b >> 32) & 0xFFFFFFFF
+            info_ptr[1].Process.ProcessStartTime.dwLowDateTime = ft_b & 0xFFFFFFFF
+            info_ptr[1].TSSessionId = 1
+            return 0
+
+        def RmEndSession(self, session):  # noqa: N802
+            return 0
+
+    proc_images = {
+        1001: (ft_a, r"C:\App\agy.exe.11.old"),
+        1002: (ft_b, r"C:\App\agy.exe.22.old"),
+    }
+
+    class _AmbiguousKernel32:
+        def GetCurrentProcessId(self):  # noqa: N802
+            return 999
+
+        def ProcessIdToSessionId(self, pid, sess_ptr):  # noqa: N802
+            ctypes.cast(sess_ptr, ctypes.POINTER(wintypes.DWORD)).contents.value = 1
+            return 1
+
+        def OpenProcess(self, access, inherit, pid):  # noqa: N802
+            return pid if pid in proc_images else 0
+
+        def WaitForSingleObject(self, h, timeout):  # noqa: N802
+            return wc.WAIT_TIMEOUT
+
+        def GetProcessTimes(self, h, c_ptr, e_ptr, k_ptr, u_ptr):  # noqa: N802
+            ft, _ = proc_images[h]
+            c_ft = ctypes.cast(c_ptr, ctypes.POINTER(wc.FILETIME)).contents
+            c_ft.dwHighDateTime = (ft >> 32) & 0xFFFFFFFF
+            c_ft.dwLowDateTime = ft & 0xFFFFFFFF
+            return 1
+
+        def QueryFullProcessImageNameW(self, h, flags, buf, size_ptr):  # noqa: N802
+            _, img = proc_images[h]
+            for idx, ch in enumerate(img):
+                buf[idx] = ch
+            buf[len(img)] = "\0"
+            ctypes.cast(size_ptr, ctypes.POINTER(wintypes.DWORD)).contents.value = len(img)
+            return 1
+
+        def CloseHandle(self, h):  # noqa: N802
+            return 1
+
+    monkeypatch.setattr(wc, "_rstrtmgr", _AmbiguousRstrtMgr())
+    monkeypatch.setattr(wc, "_kernel32", _AmbiguousKernel32())
+
+    assert wc.find_process_by_lock_path(
+        "C:\\dummy.lock", allowed_images=("agy.exe",)
+    ) is None, (
+        "Two verified `.old` rotation holders must still trigger the v0.3.1 "
+        "ambiguity fail-closed (spec §3)."
+    )
